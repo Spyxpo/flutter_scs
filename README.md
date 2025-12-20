@@ -21,7 +21,7 @@ Add to your `pubspec.yaml`:
 dependencies:
   flutter_scs:
     git:
-      url: https://github.com/AstroX11/SCS.git
+      url: https://github.com/Spyxpo/flutter_scs.git
       path: flutter_scs
 ```
 
