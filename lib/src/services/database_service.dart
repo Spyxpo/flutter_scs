@@ -6,6 +6,13 @@ import '../utils/http_client.dart';
 /// Service for database operations with collections and documents.
 ///
 /// Provides a Firestore-like API for working with NoSQL data.
+///
+/// SCS supports two database backends (configured server-side via DATABASE_TYPE):
+/// - **eaZI Database** (DATABASE_TYPE=eazi): File-based NoSQL, ideal for development
+/// - **RelaDB** (DATABASE_TYPE=mongodb): Production-grade NoSQL with advanced features
+///
+/// The SDK API remains the same regardless of backend - switching databases requires
+/// no client-side code changes.
 class DatabaseService {
   final ScsHttpClient _client;
 
