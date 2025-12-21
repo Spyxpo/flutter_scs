@@ -126,19 +126,36 @@ NoSQL document database with collections and subcollections. SCS supports two po
 | Type | Name | Description | Best For |
 |------|------|-------------|----------|
 | `eazi` | **eaZI Database** | Document-based NoSQL with Firestore-like collections, documents, and subcollections | Development, prototyping, small to medium apps |
-| `mongodb` | **RelaDB** | Production-grade NoSQL database with relational-style views | Production, scalability, advanced queries |
+| `reladb` | **RelaDB** | Production-grade NoSQL database with relational-style views | Production, scalability, advanced queries |
 
-### Configuration
+### Initialize with eaZI (Default)
 
-Configure the backend database type via `DATABASE_TYPE` environment variable:
+```dart
+import 'package:flutter_scs/flutter_scs.dart';
 
-```env
-# For eaZI Database (default) - No external dependencies
-DATABASE_TYPE=eazi
+// eaZI is the default database - no special configuration needed
+final scs = await SCS.initializeApp(
+  ScsConfig(
+    projectId: 'your-project-id',
+    apiKey: 'your-api-key',
+    // databaseType: 'eazi' is implicit
+  ),
+);
+```
 
-# For RelaDB (production-grade)
-DATABASE_TYPE=mongodb
-MONGODB_URI=mongodb://localhost:27017/scs_main
+### Initialize with RelaDB (Production)
+
+```dart
+import 'package:flutter_scs/flutter_scs.dart';
+
+// Use RelaDB for production
+final scs = await SCS.initializeApp(
+  ScsConfig(
+    projectId: 'your-project-id',
+    apiKey: 'your-api-key',
+    databaseType: 'reladb',  // Enable RelaDB
+  ),
+);
 ```
 
 ### eaZI Database Features
@@ -151,86 +168,148 @@ MONGODB_URI=mongodb://localhost:27017/scs_main
 
 ### RelaDB Features
 
-- **Production-ready**: Built on MongoDB for reliability and performance
+- **Production-ready**: Built for reliability and performance
 - **Scalable**: Horizontal scaling and replication support
 - **Advanced queries**: Aggregation pipelines, complex filters
 - **Indexing**: Custom indexes for optimized performance
 - **Schema flexibility**: Dynamic schema with validation support
 - **Relational-style views**: Table view with columns and rows in the console
 
-### Add a document
+### Collection Operations
 
 ```dart
-final doc = await scs.database.collection('todos').add({
-  'title': 'Buy groceries',
-  'completed': false,
-  'createdAt': DateTime.now().toIso8601String(),
-});
-print('Created document: ${doc.id}');
+// Get a collection reference
+final users = scs.database.collection('users');
+
+// List all collections
+final collections = await scs.database.listCollections();
+
+// Create a collection
+await scs.database.createCollection('newCollection');
+
+// Delete a collection
+await scs.database.deleteCollection('oldCollection');
 ```
 
-### Get a document
+### Document Operations
 
 ```dart
-final snapshot = await scs.database
-    .collection('todos')
-    .doc('document-id')
+// Add document with auto-generated ID
+final doc = await scs.database.collection('users').add({
+  'name': 'John Doe',
+  'email': 'john@example.com',
+  'age': 30,
+  'tags': ['developer', 'flutter'],
+  'profile': {
+    'bio': 'Software developer',
+    'avatar': 'https://example.com/avatar.jpg',
+  },
+});
+print('Document ID: ${doc.id}');
+
+// Set document with custom ID (creates or overwrites)
+await scs.database.collection('users').doc('user-123').set({
+  'name': 'Jane Doe',
+  'email': 'jane@example.com',
+});
+
+// Get a single document
+final snapshot = await scs.database.collection('users').doc('user-123').get();
+if (snapshot.exists) {
+  print('Name: ${snapshot.data!['name']}');
+}
+
+// Update document (partial update)
+await scs.database.collection('users').doc('user-123').update({
+  'age': 31,
+  'profile.bio': 'Senior developer',
+});
+
+// Delete document
+await scs.database.collection('users').doc('user-123').delete();
+```
+
+### Query Operations
+
+```dart
+// Simple query with single filter
+final activeUsers = await scs.database.collection('users')
+    .whereEqualTo('status', 'active')
     .get();
 
-if (snapshot.exists) {
-  print('Title: ${snapshot.data!['title']}');
-}
-```
+// Multiple filters
+final results = await scs.database.collection('users')
+    .whereGreaterThanOrEqualTo('age', 18)
+    .whereEqualTo('status', 'active')
+    .get();
 
-### Query documents
-
-```dart
-final snapshot = await scs.database
-    .collection('todos')
-    .whereEqualTo('completed', false)
+// Ordering and pagination
+final posts = await scs.database.collection('posts')
+    .whereEqualTo('published', true)
     .orderByDesc('createdAt')
     .limit(10)
+    .skip(20)
     .get();
 
-for (final doc in snapshot.docs) {
-  print('${doc.id}: ${doc.data['title']}');
-}
+// Using 'in' operator
+final featured = await scs.database.collection('posts')
+    .whereIn('category', ['tech', 'science', 'news'])
+    .get();
+
+// Using 'contains' for array fields
+final tagged = await scs.database.collection('posts')
+    .whereContains('tags', 'flutter')
+    .get();
 ```
 
-### Update a document
+### Query Operators
 
-```dart
-await scs.database
-    .collection('todos')
-    .doc('document-id')
-    .update({'completed': true});
-```
-
-### Delete a document
-
-```dart
-await scs.database
-    .collection('todos')
-    .doc('document-id')
-    .delete();
-```
+| Operator | Method | Example |
+|----------|--------|---------|
+| `==` | `whereEqualTo()` | `.whereEqualTo('status', 'active')` |
+| `!=` | `whereNotEqualTo()` | `.whereNotEqualTo('status', 'deleted')` |
+| `>` | `whereGreaterThan()` | `.whereGreaterThan('age', 18)` |
+| `>=` | `whereGreaterThanOrEqualTo()` | `.whereGreaterThanOrEqualTo('age', 18)` |
+| `<` | `whereLessThan()` | `.whereLessThan('price', 100)` |
+| `<=` | `whereLessThanOrEqualTo()` | `.whereLessThanOrEqualTo('price', 50)` |
+| `in` | `whereIn()` | `.whereIn('status', ['active', 'pending'])` |
+| `contains` | `whereContains()` | `.whereContains('tags', 'featured')` |
 
 ### Subcollections
 
 ```dart
-// Add to subcollection
-await scs.database
+// Access a subcollection
+final postsRef = scs.database
     .collection('users')
-    .doc('user-id')
-    .collection('posts')
-    .add({'title': 'My first post'});
+    .doc('userId')
+    .collection('posts');
+
+// Add to subcollection
+final post = await postsRef.add({
+  'title': 'My First Post',
+  'content': 'Hello World!',
+  'createdAt': DateTime.now().toIso8601String(),
+});
 
 // Query subcollection
-final posts = await scs.database
-    .collection('users')
-    .doc('user-id')
-    .collection('posts')
+final userPosts = await postsRef
+    .orderByDesc('createdAt')
+    .limit(5)
     .get();
+
+// Nested subcollections (e.g., users/userId/posts/postId/comments)
+final commentsRef = scs.database
+    .collection('users')
+    .doc('userId')
+    .collection('posts')
+    .doc('postId')
+    .collection('comments');
+
+// List subcollections of a document
+final subcollections = await scs.database
+    .collection('users')
+    .doc('userId')
+    .listCollections();
 ```
 
 ## Storage
