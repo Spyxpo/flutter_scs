@@ -433,6 +433,106 @@ final response = await scs.ai.complete(
 print(response.text);
 ```
 
+### Image Generation
+
+```dart
+final response = await scs.ai.generateImage(
+  prompt: 'A sunset over mountains',
+  size: '512x512',
+);
+print('Image URL: ${response.imageUrl}');
+```
+
+## AI Agents
+
+Create and manage AI agents with custom instructions and tools.
+
+### Create an Agent
+
+```dart
+final agent = await scs.ai.createAgent(
+  name: 'Customer Support',
+  instructions: 'You are a helpful customer support assistant. Be polite and helpful.',
+  model: 'llama3.2',
+  temperature: 0.7,
+);
+print('Created agent: ${agent.id}');
+```
+
+### Run the Agent
+
+```dart
+// Run the agent
+var response = await scs.ai.runAgent(
+  agent.id,
+  input: 'How do I reset my password?',
+);
+print('Agent: ${response.output}');
+print('Session: ${response.sessionId}');
+
+// Continue the conversation in the same session
+response = await scs.ai.runAgent(
+  agent.id,
+  input: 'Thanks! What about enabling 2FA?',
+  sessionId: response.sessionId,
+);
+```
+
+### Manage Agent Sessions
+
+```dart
+// List agent sessions
+final sessions = await scs.ai.listAgentSessions(agent.id);
+
+// Get full session history
+final session = await scs.ai.getAgentSession(agent.id, response.sessionId);
+for (final msg in session.messages) {
+  print('${msg.role}: ${msg.content}');
+}
+
+// Delete a session
+await scs.ai.deleteAgentSession(agent.id, response.sessionId);
+```
+
+### Manage Agents
+
+```dart
+// List agents
+final agents = await scs.ai.listAgents();
+
+// Update agent
+await scs.ai.updateAgent(
+  agent.id,
+  instructions: 'Updated instructions here',
+  temperature: 0.5,
+);
+
+// Delete agent
+await scs.ai.deleteAgent(agent.id);
+```
+
+### Agent Tools
+
+```dart
+// Define a tool for agents
+final tool = await scs.ai.defineTool(
+  name: 'get_weather',
+  description: 'Get weather for a location',
+  parameters: {
+    'type': 'object',
+    'properties': {
+      'location': {'type': 'string', 'description': 'City name'}
+    }
+  },
+);
+
+// List tools
+final tools = await scs.ai.listTools();
+
+// Delete a tool
+await scs.ai.deleteTool(tool.id);
+```
+
 ## Error Handling
 
 All SDK methods can throw `ScsException`:

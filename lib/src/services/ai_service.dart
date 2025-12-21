@@ -2,8 +2,8 @@ import '../utils/http_client.dart';
 
 /// Service for AI operations.
 ///
-/// Provides methods for chat, completions, and image generation
-/// using local LLM models (Ollama).
+/// Provides methods for chat, completions, image generation,
+/// and AI agents using local LLM models (Ollama).
 class AiService {
   final ScsHttpClient _client;
 
@@ -120,6 +120,171 @@ class AiService {
   Future<Map<String, dynamic>> getStats() async {
     final response = await _client.get('ai/stats');
     return response['stats'] as Map<String, dynamic>? ?? response;
+  }
+
+  // ==================== AI AGENTS ====================
+
+  /// Creates a new AI agent.
+  Future<Agent> createAgent({
+    required String name,
+    String? instructions,
+    String? description,
+    String? model,
+    List<String>? tools,
+    double? temperature,
+    int? maxTokens,
+    Map<String, dynamic>? metadata,
+  }) async {
+    final response = await _client.post(
+      'ai/agents',
+      body: {
+        'name': name,
+        if (instructions != null) 'instructions': instructions,
+        if (description != null) 'description': description,
+        if (model != null) 'model': model,
+        if (tools != null) 'tools': tools,
+        if (temperature != null) 'temperature': temperature,
+        if (maxTokens != null) 'maxTokens': maxTokens,
+        if (metadata != null) 'metadata': metadata,
+      },
+    );
+    return Agent.fromJson(response['agent'] as Map<String, dynamic>? ?? response);
+  }
+
+  /// Lists all agents.
+  Future<List<Agent>> listAgents({int? limit, int? offset, String? status}) async {
+    final params = <String, String>{};
+    if (limit != null) params['limit'] = limit.toString();
+    if (offset != null) params['offset'] = offset.toString();
+    if (status != null) params['status'] = status;
+
+    final queryString = params.isNotEmpty
+        ? '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}'
+        : '';
+
+    final response = await _client.get('ai/agents$queryString');
+    final agents = response['agents'] as List<dynamic>? ?? [];
+    return agents.map((a) => Agent.fromJson(a as Map<String, dynamic>)).toList();
+  }
+
+  /// Gets an agent by ID.
+  Future<Agent> getAgent(String agentId) async {
+    final response = await _client.get('ai/agents/$agentId');
+    return Agent.fromJson(response['agent'] as Map<String, dynamic>? ?? response);
+  }
+
+  /// Updates an agent.
+  Future<Agent> updateAgent(
+    String agentId, {
+    String? name,
+    String? instructions,
+    String? description,
+    String? model,
+    List<String>? tools,
+    double? temperature,
+    int? maxTokens,
+    Map<String, dynamic>? metadata,
+    String? status,
+  }) async {
+    final response = await _client.put(
+      'ai/agents/$agentId',
+      body: {
+        if (name != null) 'name': name,
+        if (instructions != null) 'instructions': instructions,
+        if (description != null) 'description': description,
+        if (model != null) 'model': model,
+        if (tools != null) 'tools': tools,
+        if (temperature != null) 'temperature': temperature,
+        if (maxTokens != null) 'maxTokens': maxTokens,
+        if (metadata != null) 'metadata': metadata,
+        if (status != null) 'status': status,
+      },
+    );
+    return Agent.fromJson(response['agent'] as Map<String, dynamic>? ?? response);
+  }
+
+  /// Deletes an agent.
+  Future<void> deleteAgent(String agentId) async {
+    await _client.delete('ai/agents/$agentId');
+  }
+
+  /// Runs an agent with input.
+  Future<AgentRunResponse> runAgent(
+    String agentId, {
+    required String input,
+    String? sessionId,
+    Map<String, dynamic>? context,
+  }) async {
+    final response = await _client.post(
+      'ai/agents/$agentId/run',
+      body: {
+        'input': input,
+        if (sessionId != null) 'sessionId': sessionId,
+        if (context != null) 'context': context,
+      },
+    );
+    return AgentRunResponse.fromJson(response);
+  }
+
+  /// Lists sessions for an agent.
+  Future<List<AgentSession>> listAgentSessions(
+    String agentId, {
+    int? limit,
+    int? offset,
+  }) async {
+    final params = <String, String>{};
+    if (limit != null) params['limit'] = limit.toString();
+    if (offset != null) params['offset'] = offset.toString();
+
+    final queryString = params.isNotEmpty
+        ? '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}'
+        : '';
+
+    final response = await _client.get('ai/agents/$agentId/sessions$queryString');
+    final sessions = response['sessions'] as List<dynamic>? ?? [];
+    return sessions.map((s) => AgentSession.fromJson(s as Map<String, dynamic>)).toList();
+  }
+
+  /// Gets an agent session with full message history.
+  Future<AgentSession> getAgentSession(String agentId, String sessionId) async {
+    final response = await _client.get('ai/agents/$agentId/sessions/$sessionId');
+    return AgentSession.fromJson(response['session'] as Map<String, dynamic>? ?? response);
+  }
+
+  /// Deletes an agent session.
+  Future<void> deleteAgentSession(String agentId, String sessionId) async {
+    await _client.delete('ai/agents/$agentId/sessions/$sessionId');
+  }
+
+  // Agent Tools
+
+  /// Defines a tool that agents can use.
+  Future<AgentTool> defineTool({
+    required String name,
+    String? description,
+    Map<String, dynamic>? parameters,
+  }) async {
+    final response = await _client.post(
+      'ai/tools',
+      body: {
+        'name': name,
+        if (description != null) 'description': description,
+        if (parameters != null) 'parameters': parameters,
+      },
+    );
+    return AgentTool.fromJson(response['tool'] as Map<String, dynamic>? ?? response);
+  }
+
+  /// Lists all defined tools.
+  Future<List<AgentTool>> listTools() async {
+    final response = await _client.get('ai/tools');
+    final tools = response['tools'] as List<dynamic>? ?? [];
+    return tools.map((t) => AgentTool.fromJson(t as Map<String, dynamic>)).toList();
+  }
+
+  /// Deletes a tool.
+  Future<void> deleteTool(String toolId) async {
+    await _client.delete('ai/tools/$toolId');
   }
 }
 
@@ -307,6 +472,160 @@ class Conversation {
           : null,
       updatedAt: json['updatedAt'] != null
           ? DateTime.tryParse(json['updatedAt'].toString())
+          : null,
+    );
+  }
+}
+
+// ==================== AI AGENTS ====================
+
+/// An AI agent.
+class Agent {
+  final String id;
+  final String name;
+  final String? description;
+  final String? instructions;
+  final String? model;
+  final List<String> tools;
+  final double? temperature;
+  final int? maxTokens;
+  final Map<String, dynamic>? metadata;
+  final String status;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  const Agent({
+    required this.id,
+    required this.name,
+    this.description,
+    this.instructions,
+    this.model,
+    this.tools = const [],
+    this.temperature,
+    this.maxTokens,
+    this.metadata,
+    this.status = 'active',
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory Agent.fromJson(Map<String, dynamic> json) {
+    return Agent(
+      id: json['agentId'] as String? ?? json['_id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      description: json['description'] as String?,
+      instructions: json['instructions'] as String?,
+      model: json['model'] as String?,
+      tools: (json['tools'] as List<dynamic>?)?.cast<String>() ?? [],
+      temperature: (json['temperature'] as num?)?.toDouble(),
+      maxTokens: json['maxTokens'] as int?,
+      metadata: json['metadata'] as Map<String, dynamic>?,
+      status: json['status'] as String? ?? 'active',
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'].toString())
+          : null,
+    );
+  }
+}
+
+/// An agent session.
+class AgentSession {
+  final String sessionId;
+  final String agentId;
+  final List<ChatMessage> messages;
+  final Map<String, dynamic>? context;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  const AgentSession({
+    required this.sessionId,
+    required this.agentId,
+    this.messages = const [],
+    this.context,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory AgentSession.fromJson(Map<String, dynamic> json) {
+    final messages = (json['messages'] as List<dynamic>? ?? [])
+        .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
+        .toList();
+
+    return AgentSession(
+      sessionId: json['sessionId'] as String? ?? '',
+      agentId: json['agentId'] as String? ?? '',
+      messages: messages,
+      context: json['context'] as Map<String, dynamic>?,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'].toString())
+          : null,
+    );
+  }
+}
+
+/// An agent run response.
+class AgentRunResponse {
+  final String output;
+  final String sessionId;
+  final String agentId;
+  final String? model;
+  final int? tokensUsed;
+  final int? processingTime;
+
+  const AgentRunResponse({
+    required this.output,
+    required this.sessionId,
+    required this.agentId,
+    this.model,
+    this.tokensUsed,
+    this.processingTime,
+  });
+
+  factory AgentRunResponse.fromJson(Map<String, dynamic> json) {
+    return AgentRunResponse(
+      output: json['output'] as String? ?? '',
+      sessionId: json['sessionId'] as String? ?? '',
+      agentId: json['agentId'] as String? ?? '',
+      model: json['model'] as String?,
+      tokensUsed: json['tokensUsed'] as int?,
+      processingTime: json['processingTime'] as int?,
+    );
+  }
+}
+
+/// An agent tool.
+class AgentTool {
+  final String id;
+  final String name;
+  final String? description;
+  final Map<String, dynamic>? parameters;
+  final String status;
+  final DateTime? createdAt;
+
+  const AgentTool({
+    required this.id,
+    required this.name,
+    this.description,
+    this.parameters,
+    this.status = 'active',
+    this.createdAt,
+  });
+
+  factory AgentTool.fromJson(Map<String, dynamic> json) {
+    return AgentTool(
+      id: json['toolId'] as String? ?? json['_id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      description: json['description'] as String?,
+      parameters: json['parameters'] as Map<String, dynamic>?,
+      status: json['status'] as String? ?? 'active',
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
           : null,
     );
   }
