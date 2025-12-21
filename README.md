@@ -117,6 +117,699 @@ await scs.auth.updateProfile(
 await scs.auth.signOut();
 ```
 
+### OAuth and Social Sign-In
+
+SCS supports multiple OAuth providers for seamless social authentication. Each provider integrates with Flutter's platform-specific sign-in packages.
+
+#### Google Sign-In
+
+Authenticate users with their Google account using the `google_sign_in` package.
+
+```dart
+// Sign in with Google
+final user = await scs.auth.signInWithGoogle(
+  idToken: 'google-id-token',         // Required: ID token from Google Sign-In
+  accessToken: 'google-access-token', // Optional: Access token for additional scopes
+);
+
+print('User ID: ${user.uid}');
+print('Email: ${user.email}');
+print('Display Name: ${user.displayName}');
+print('Photo URL: ${user.photoURL}');
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `idToken` | String | Yes | ID token from Google Sign-In |
+| `accessToken` | String | No | Access token for additional Google API scopes |
+
+**Returns:** `Future<ScsUser>`
+
+**Complete Example with google_sign_in package:**
+
+```dart
+import 'package:google_sign_in/google_sign_in.dart';
+
+class AuthService {
+  final SCS scs;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
+
+  AuthService(this.scs);
+
+  Future<ScsUser?> signInWithGoogle() async {
+    try {
+      // Trigger the Google Sign-In flow
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        return null; // User cancelled
+      }
+
+      // Get the authentication details
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      // Sign in to SCS with the tokens
+      final user = await scs.auth.signInWithGoogle(
+        idToken: googleAuth.idToken!,
+        accessToken: googleAuth.accessToken,
+      );
+
+      return user;
+    } catch (e) {
+      print('Google sign-in error: $e');
+      rethrow;
+    }
+  }
+}
+```
+
+#### Facebook Sign-In
+
+Authenticate users with their Facebook account using the `flutter_facebook_auth` package.
+
+```dart
+// Sign in with Facebook
+final user = await scs.auth.signInWithFacebook(
+  accessToken: 'facebook-access-token',  // Required
+);
+
+print('User: ${user.displayName}');
+print('Email: ${user.email}'); // May be null if permission not granted
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `accessToken` | String | Yes | Access token from Facebook Login |
+
+**Complete Example with flutter_facebook_auth package:**
+
+```dart
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+
+Future<ScsUser?> signInWithFacebook() async {
+  try {
+    // Trigger the Facebook Sign-In flow
+    final LoginResult result = await FacebookAuth.instance.login(
+      permissions: ['email', 'public_profile'],
+    );
+
+    if (result.status != LoginStatus.success) {
+      return null; // User cancelled or error
+    }
+
+    // Sign in to SCS with the token
+    final user = await scs.auth.signInWithFacebook(
+      accessToken: result.accessToken!.tokenString,
+    );
+
+    return user;
+  } catch (e) {
+    print('Facebook sign-in error: $e');
+    rethrow;
+  }
+}
+```
+
+#### Apple Sign-In
+
+Authenticate users with their Apple ID using the `sign_in_with_apple` package. Required for iOS apps with social login.
+
+```dart
+// Sign in with Apple
+final user = await scs.auth.signInWithApple(
+  identityToken: 'apple-identity-token',    // Required
+  authorizationCode: 'apple-auth-code',     // Optional
+  fullName: 'John Doe',                      // Optional, first sign-in only
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `identityToken` | String | Yes | JWT identity token from Sign in with Apple |
+| `authorizationCode` | String | No | Authorization code for server verification |
+| `fullName` | String | No | User's full name (Apple only provides this on first sign-in) |
+
+**Important Notes:**
+
+- Apple only provides the user's name on the **first sign-in**. Store it immediately.
+- Users can choose to hide their email (Apple provides a relay email).
+- Required for apps with social login on iOS/macOS App Store.
+
+**Complete Example with sign_in_with_apple package:**
+
+```dart
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+Future<ScsUser?> signInWithApple() async {
+  try {
+    final credential = await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+    );
+
+    // Get full name (only available on first sign-in)
+    String? fullName;
+    if (credential.givenName != null || credential.familyName != null) {
+      fullName = [credential.givenName, credential.familyName]
+          .where((n) => n != null)
+          .join(' ');
+    }
+
+    // Sign in to SCS with the tokens
+    final user = await scs.auth.signInWithApple(
+      identityToken: credential.identityToken!,
+      authorizationCode: credential.authorizationCode,
+      fullName: fullName,
+    );
+
+    return user;
+  } catch (e) {
+    print('Apple sign-in error: $e');
+    rethrow;
+  }
+}
+```
+
+#### GitHub Sign-In
+
+Authenticate users with their GitHub account using OAuth 2.0 flow.
+
+```dart
+// Sign in with GitHub
+final user = await scs.auth.signInWithGitHub(
+  code: 'github-oauth-code',                    // Required
+  redirectUri: 'https://yourapp.com/callback',  // Optional
+);
+
+print('GitHub username: ${user.displayName}');
+print('Email: ${user.email}');
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `code` | String | Yes | OAuth authorization code from GitHub |
+| `redirectUri` | String | No | Must match your GitHub OAuth App settings |
+
+**OAuth Flow Example with url_launcher:**
+
+```dart
+import 'package:url_launcher/url_launcher.dart';
+
+class GitHubAuth {
+  static const clientId = 'your-github-client-id';
+  static const redirectUri = 'yourapp://callback';
+
+  Future<void> startGitHubSignIn() async {
+    final authUrl = Uri.parse(
+      'https://github.com/login/oauth/authorize'
+      '?client_id=$clientId'
+      '&redirect_uri=$redirectUri'
+      '&scope=read:user user:email'
+    );
+
+    await launchUrl(authUrl, mode: LaunchMode.externalApplication);
+  }
+
+  Future<ScsUser> handleCallback(Uri callbackUri) async {
+    final code = callbackUri.queryParameters['code'];
+    if (code == null) {
+      throw Exception('No code in callback');
+    }
+
+    return await scs.auth.signInWithGitHub(
+      code: code,
+      redirectUri: redirectUri,
+    );
+  }
+}
+```
+
+#### Twitter/X Sign-In
+
+Authenticate users with their Twitter/X account using OAuth 1.0a.
+
+```dart
+// Sign in with Twitter/X
+final user = await scs.auth.signInWithTwitter(
+  oauthToken: 'twitter-oauth-token',           // Required
+  oauthTokenSecret: 'twitter-oauth-secret',    // Required
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `oauthToken` | String | Yes | OAuth token from Twitter authentication |
+| `oauthTokenSecret` | String | Yes | OAuth token secret from Twitter authentication |
+
+**Note:** Consider using the `twitter_login` Flutter package to handle the OAuth 1.0a flow.
+
+#### Microsoft Sign-In
+
+Authenticate users with their Microsoft account (personal, work, or school) using MSAL.
+
+```dart
+// Sign in with Microsoft
+final user = await scs.auth.signInWithMicrosoft(
+  accessToken: 'microsoft-access-token',  // Required
+  idToken: 'microsoft-id-token',          // Optional
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `accessToken` | String | Yes | Access token from MSAL |
+| `idToken` | String | No | ID token for additional user claims |
+
+**Example with msal_flutter package:**
+
+```dart
+import 'package:msal_flutter/msal_flutter.dart';
+
+Future<ScsUser?> signInWithMicrosoft() async {
+  final config = PublicClientApplicationConfig(
+    clientId: 'your-client-id',
+    authority: 'https://login.microsoftonline.com/common',
+    redirectUri: 'msauth://your.app.bundle/callback',
+  );
+
+  final pca = await PublicClientApplication.create(config);
+
+  try {
+    final result = await pca.acquireToken(
+      scopes: ['openid', 'profile', 'email'],
+    );
+
+    return await scs.auth.signInWithMicrosoft(
+      accessToken: result.accessToken,
+      idToken: result.idToken,
+    );
+  } catch (e) {
+    print('Microsoft sign-in error: $e');
+    rethrow;
+  }
+}
+```
+
+### Anonymous Authentication
+
+Allow users to use your app without creating an account. Anonymous accounts can later be upgraded to permanent accounts by linking a provider.
+
+```dart
+// Sign in anonymously (creates a temporary account)
+final user = await scs.auth.signInAnonymously(
+  customData: {
+    'referrer': 'landing-page',
+    'campaign': 'summer-sale',
+  }, // optional
+);
+
+print('Anonymous user ID: ${user.uid}');
+print('Is anonymous: ${user.isAnonymous}'); // true
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `customData` | Map<String, dynamic> | No | Custom data for analytics |
+
+**Use Cases:**
+
+- Allow users to try your app before signing up
+- Guest checkout in e-commerce
+- Save user progress/preferences before account creation
+- A/B testing with user tracking
+
+**Converting Anonymous to Permanent Account:**
+
+```dart
+// User decides to create a permanent account
+// Link their anonymous account to a provider
+try {
+  final updatedUser = await scs.auth.linkProvider(
+    provider: 'google',
+    credentials: {'idToken': 'google-id-token'},
+  );
+
+  print('Account upgraded! User data preserved.');
+  print('Is anonymous: ${updatedUser.isAnonymous}'); // false
+} on ScsException catch (e) {
+  if (e.code == 'auth/credential-already-in-use') {
+    print('This Google account is already registered. Please sign in instead.');
+  } else {
+    rethrow;
+  }
+}
+```
+
+### Phone Number Authentication
+
+Two-step authentication flow using SMS verification codes.
+
+```dart
+// Step 1: Send verification code to phone
+final verificationId = await scs.auth.sendPhoneVerificationCode(
+  phoneNumber: '+1234567890',          // Required: E.164 format
+  recaptchaToken: 'recaptcha-token',   // Optional: For bot protection
+);
+
+print('Verification ID: $verificationId');
+// Store this ID - you'll need it in step 2
+
+// Step 2: User enters the code they received
+final user = await scs.auth.signInWithPhoneNumber(
+  verificationId: verificationId,   // The ID from step 1
+  code: '123456',                   // 6-digit code from SMS
+);
+
+print('Phone verified: ${user.phoneNumber}');
+```
+
+**sendPhoneVerificationCode Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `phoneNumber` | String | Yes | Phone number in E.164 format (e.g., +1234567890) |
+| `recaptchaToken` | String | No | reCAPTCHA token for abuse prevention |
+
+**signInWithPhoneNumber Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `verificationId` | String | Yes | Verification ID from sendPhoneVerificationCode |
+| `code` | String | Yes | 6-digit verification code from SMS |
+
+**Complete Flow Example:**
+
+```dart
+class PhoneAuthService {
+  final SCS scs;
+  String? _verificationId;
+
+  PhoneAuthService(this.scs);
+
+  Future<void> sendCode(String phoneNumber) async {
+    try {
+      _verificationId = await scs.auth.sendPhoneVerificationCode(
+        phoneNumber: phoneNumber,
+      );
+    } on ScsException catch (e) {
+      switch (e.code) {
+        case 'auth/invalid-phone-number':
+          throw Exception('Invalid phone number format. Use E.164 format (+1234567890)');
+        case 'auth/too-many-requests':
+          throw Exception('Too many attempts. Please try again later.');
+        default:
+          rethrow;
+      }
+    }
+  }
+
+  Future<ScsUser> verifyCode(String code) async {
+    if (_verificationId == null) {
+      throw Exception('Must call sendCode first');
+    }
+
+    try {
+      return await scs.auth.signInWithPhoneNumber(
+        verificationId: _verificationId!,
+        code: code,
+      );
+    } on ScsException catch (e) {
+      switch (e.code) {
+        case 'auth/invalid-verification-code':
+          throw Exception('Invalid verification code. Please try again.');
+        case 'auth/code-expired':
+          throw Exception('Code expired. Please request a new one.');
+        default:
+          rethrow;
+      }
+    }
+  }
+}
+
+// Usage
+final phoneAuth = PhoneAuthService(scs);
+await phoneAuth.sendCode('+1234567890');
+// ... show OTP input UI ...
+final user = await phoneAuth.verifyCode('123456');
+```
+
+### Custom Token Authentication
+
+Sign in using a JWT token generated by your backend. Useful for migration or custom auth.
+
+```dart
+// Sign in with a custom token (generated by your backend)
+final user = await scs.auth.signInWithCustomToken('your-custom-jwt-token');
+
+print('Signed in user: ${user.uid}');
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | String | Yes | JWT token generated by your backend |
+
+**Use Cases:**
+
+- Migrating users from another authentication system
+- Server-side user creation with immediate client sign-in
+- Integration with enterprise SSO systems
+- Machine-to-machine authentication
+
+### Account Linking
+
+Link multiple authentication providers to a single account. Users can sign in with any linked provider.
+
+```dart
+// Link a provider to current account
+final user = await scs.auth.linkProvider(
+  provider: 'facebook',
+  credentials: {'accessToken': 'facebook-access-token'},
+);
+
+print('Linked providers: ${user.providerData}');
+// [ScsProviderData(providerId: 'password'), ScsProviderData(providerId: 'google'), ...]
+
+// Unlink a provider from current account
+final updatedUser = await scs.auth.unlinkProvider('facebook');
+print('Remaining providers: ${updatedUser.providerData}');
+
+// Get available sign-in methods for an email
+final methods = await scs.auth.fetchSignInMethodsForEmail('user@example.com');
+print('Available methods: $methods');
+// ['password', 'google', 'facebook']
+```
+
+**linkProvider Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `provider` | String | Yes | Provider name: 'google', 'facebook', 'apple', 'github', 'twitter', 'microsoft' |
+| `credentials` | Map<String, dynamic> | Yes | Provider-specific credentials (tokens) |
+
+**Supported Providers and Credentials:**
+
+| Provider | Required Credentials |
+|----------|---------------------|
+| `google` | `{'idToken': '...', 'accessToken': '...'}` |
+| `facebook` | `{'accessToken': '...'}` |
+| `apple` | `{'identityToken': '...', 'authorizationCode': '...', 'fullName': '...'}` |
+| `github` | `{'code': '...', 'redirectUri': '...'}` |
+| `twitter` | `{'oauthToken': '...', 'oauthTokenSecret': '...'}` |
+| `microsoft` | `{'accessToken': '...', 'idToken': '...'}` |
+
+### Password Reset & Email Verification
+
+Handle password recovery and email verification flows.
+
+```dart
+// Send password reset email
+await scs.auth.sendPasswordResetEmail('user@example.com');
+print('Password reset email sent');
+
+// Confirm password reset (user clicks link in email, you extract the code)
+await scs.auth.confirmPasswordReset(
+  code: 'reset-code-from-email',       // Code from the reset link
+  newPassword: 'newSecurePassword123',  // User's new password
+);
+print('Password successfully reset');
+
+// Send email verification to current user
+await scs.auth.sendEmailVerification();
+print('Verification email sent');
+
+// Verify email with code (user clicks link, you extract the code)
+await scs.auth.verifyEmail('verification-code');
+print('Email verified');
+```
+
+**Error Handling:**
+
+```dart
+Future<bool> resetPassword(String email) async {
+  try {
+    await scs.auth.sendPasswordResetEmail(email);
+    return true;
+  } on ScsException catch (e) {
+    switch (e.code) {
+      case 'auth/user-not-found':
+        // Don't reveal if user exists for security
+        return true;
+      case 'auth/too-many-requests':
+        throw Exception('Too many attempts. Please try later.');
+      default:
+        rethrow;
+    }
+  }
+}
+
+Future<void> confirmReset(String code, String newPassword) async {
+  if (newPassword.length < 8) {
+    throw Exception('Password must be at least 8 characters');
+  }
+
+  try {
+    await scs.auth.confirmPasswordReset(
+      code: code,
+      newPassword: newPassword,
+    );
+  } on ScsException catch (e) {
+    switch (e.code) {
+      case 'auth/expired-action-code':
+        throw Exception('Reset link expired. Please request a new one.');
+      case 'auth/invalid-action-code':
+        throw Exception('Invalid reset link.');
+      case 'auth/weak-password':
+        throw Exception('Password is too weak.');
+      default:
+        rethrow;
+    }
+  }
+}
+```
+
+### Complete Authentication Example
+
+```dart
+import 'package:flutter_scs/flutter_scs.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+class AuthService {
+  final SCS scs;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
+
+  AuthService(this.scs);
+
+  // Email/Password registration
+  Future<ScsUser> register({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final user = await scs.auth.register(
+      email: email,
+      password: password,
+      displayName: displayName,
+    );
+
+    // Send verification email
+    await scs.auth.sendEmailVerification();
+
+    return user;
+  }
+
+  // Email/Password login
+  Future<ScsUser> login({
+    required String email,
+    required String password,
+  }) async {
+    return await scs.auth.login(email: email, password: password);
+  }
+
+  // Google Sign-In
+  Future<ScsUser?> signInWithGoogle() async {
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) return null;
+
+    final googleAuth = await googleUser.authentication;
+
+    return await scs.auth.signInWithGoogle(
+      idToken: googleAuth.idToken!,
+      accessToken: googleAuth.accessToken,
+    );
+  }
+
+  // Guest mode
+  Future<ScsUser> continueAsGuest({Map<String, dynamic>? customData}) async {
+    return await scs.auth.signInAnonymously(customData: customData);
+  }
+
+  // Upgrade guest to permanent account
+  Future<ScsUser> upgradeGuestAccount({
+    required String provider,
+    required Map<String, dynamic> credentials,
+  }) async {
+    final user = scs.auth.currentUser;
+    if (user == null || !user.isAnonymous) {
+      throw Exception('Current user is not anonymous');
+    }
+
+    return await scs.auth.linkProvider(
+      provider: provider,
+      credentials: credentials,
+    );
+  }
+
+  // Sign out
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await scs.auth.signOut();
+  }
+
+  // Auth state stream
+  Stream<ScsUser?> get authStateChanges => scs.auth.authStateChanges;
+}
+
+// Usage in Widget
+class AuthScreen extends StatelessWidget {
+  final AuthService authService;
+
+  const AuthScreen({Key? key, required this.authService}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<ScsUser?>(
+      stream: authService.authStateChanges,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return HomeScreen(user: snapshot.data!);
+        }
+        return LoginScreen(authService: authService);
+      },
+    );
+  }
+}
+```
+
 ## Database
 
 NoSQL document database with collections and subcollections. SCS supports two powerful database options:
