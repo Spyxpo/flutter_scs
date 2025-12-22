@@ -286,6 +286,44 @@ class AiService {
   Future<void> deleteTool(String toolId) async {
     await _client.delete('ai/tools/$toolId');
   }
+
+  // ==================== TTS & STT ====================
+
+  /// Converts text to speech.
+  ///
+  /// Args:
+  ///   text: Text to convert to speech
+  ///   voice: Optional voice preset (defaults to 'v2/en_speaker_6')
+  ///
+  /// Returns:
+  ///   TTSResponse with base64 encoded audio data
+  Future<TTSResponse> textToSpeech(String text, {String? voice}) async {
+    final body = <String, dynamic>{
+      'text': text,
+    };
+    if (voice != null) {
+      body['voice'] = voice;
+    }
+
+    final response = await _client.post('ai/tts', body: body);
+    return TTSResponse.fromJson(response);
+  }
+
+  /// Converts speech to text.
+  ///
+  /// Args:
+  ///   audio: Base64 encoded audio data
+  ///
+  /// Returns:
+  ///   STTResponse with transcribed text
+  Future<STTResponse> speechToText(String audio) async {
+    final body = <String, dynamic>{
+      'audio': audio,
+    };
+
+    final response = await _client.post('ai/stt', body: body);
+    return STTResponse.fromJson(response);
+  }
 }
 
 /// An AI model.
@@ -627,6 +665,48 @@ class AgentTool {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
+    );
+  }
+}
+
+/// TTS response.
+class TTSResponse {
+  final bool success;
+  final String audio;
+  final String format;
+  final int sampleRate;
+
+  const TTSResponse({
+    required this.success,
+    required this.audio,
+    required this.format,
+    required this.sampleRate,
+  });
+
+  factory TTSResponse.fromJson(Map<String, dynamic> json) {
+    return TTSResponse(
+      success: json['success'] as bool? ?? false,
+      audio: json['audio'] as String? ?? '',
+      format: json['format'] as String? ?? 'wav',
+      sampleRate: json['sample_rate'] as int? ?? 24000,
+    );
+  }
+}
+
+/// STT response.
+class STTResponse {
+  final bool success;
+  final String text;
+
+  const STTResponse({
+    required this.success,
+    required this.text,
+  });
+
+  factory STTResponse.fromJson(Map<String, dynamic> json) {
+    return STTResponse(
+      success: json['success'] as bool? ?? false,
+      text: json['text'] as String? ?? '',
     );
   }
 }
