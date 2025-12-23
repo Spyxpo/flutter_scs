@@ -16,7 +16,6 @@ class _DatabaseScreenState extends State<DatabaseScreen> {
   final _descriptionController = TextEditingController();
   List<ScsDocument> _documents = [];
   bool _loading = false;
-  String? _selectedDocId;
 
   @override
   void initState() {
@@ -159,6 +158,95 @@ class _DatabaseScreenState extends State<DatabaseScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _showDocumentDetails(ScsDocument doc) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              doc.get<String>('title') ?? 'Untitled',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            _buildDetailRow('ID', doc.id),
+            _buildDetailRow('Collection', _collectionName),
+            if (doc.get<String>('description')?.isNotEmpty ?? false)
+              _buildDetailRow('Description', doc.get<String>('description')!),
+            _buildDetailRow(
+              'Completed',
+              (doc.get<bool>('completed') ?? false) ? 'Yes' : 'No',
+            ),
+            if (doc.get<String>('createdAt') != null)
+              _buildDetailRow('Created', doc.get<String>('createdAt')!),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _updateDocument(doc);
+                    },
+                    icon: Icon(
+                      (doc.get<bool>('completed') ?? false)
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                    ),
+                    label: Text(
+                      (doc.get<bool>('completed') ?? false)
+                          ? 'Mark Incomplete'
+                          : 'Mark Complete',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _deleteDocument(doc.id);
+                    },
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Delete'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _queryDocuments() async {
@@ -335,12 +423,7 @@ class _DatabaseScreenState extends State<DatabaseScreen> {
                             icon: const Icon(Icons.delete_outline),
                             onPressed: () => _deleteDocument(doc.id),
                           ),
-                          onTap: () {
-                            setState(() {
-                              _selectedDocId =
-                                  _selectedDocId == doc.id ? null : doc.id;
-                            });
-                          },
+                          onTap: () => _showDocumentDetails(doc),
                           isThreeLine: description.isNotEmpty,
                         ),
                       );

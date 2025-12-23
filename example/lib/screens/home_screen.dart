@@ -10,6 +10,8 @@ import 'remote_config_screen.dart';
 import 'functions_screen.dart';
 import 'ml_screen.dart';
 import 'ai_screen.dart';
+import 'posts_screen.dart';
+import 'calls_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -100,6 +102,24 @@ class HomeScreen extends StatelessWidget {
             crossAxisSpacing: 12,
             childAspectRatio: 1.3,
             children: [
+              _FeatureCard(
+                icon: Icons.article,
+                title: 'Posts',
+                subtitle: 'Social feed',
+                color: Colors.deepPurple,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PostsScreen()),
+                ),
+              ),
+              _FeatureCard(
+                icon: Icons.video_call,
+                title: 'Calls',
+                subtitle: 'Voice & Video',
+                color: Colors.cyan,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CallsScreen()),
+                ),
+              ),
               _FeatureCard(
                 icon: Icons.storage,
                 title: 'Database',
