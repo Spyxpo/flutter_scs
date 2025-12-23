@@ -19,6 +19,8 @@ dependencies:
   mime: ^1.0.0
   crypto: ^3.0.0
   socket_io_client: ^2.0.3+1
+  url_launcher: ^6.2.0
+  flutter_web_auth_2: ^3.1.2
 
 dev_dependencies:
   flutter_test:

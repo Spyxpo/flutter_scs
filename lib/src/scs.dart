@@ -62,7 +62,7 @@ class SCS {
   }
 
   void _initServices() {
-    _auth = AuthService(_httpClient, _sessionStorage);
+    _auth = AuthService(_httpClient, _sessionStorage, config.baseUrl);
     _database = DatabaseService(_httpClient);
     _storage = StorageService(_httpClient);
     _realtime = RealtimeService(_httpClient, config);

@@ -9,6 +9,10 @@ export 'src/scs.dart';
 export 'src/scs_config.dart';
 export 'src/scs_exception.dart';
 
+// Auth & OAuth
+export 'src/auth/oauth_config.dart';
+export 'src/auth/oauth_provider.dart';
+
 // Services
 export 'src/services/auth_service.dart';
 export 'src/services/database_service.dart';

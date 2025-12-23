@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../auth/oauth_config.dart';
+import '../auth/oauth_provider.dart';
 import '../models/user.dart';
 import '../scs_exception.dart';
 import '../utils/http_client.dart';
@@ -12,12 +14,66 @@ import '../utils/session_storage.dart';
 class AuthService {
   final ScsHttpClient _client;
   final SessionStorage _storage;
+  final String _baseUrl;
 
   ScsUser? _currentUser;
   final StreamController<ScsUser?> _authStateController =
       StreamController<ScsUser?>.broadcast();
 
-  AuthService(this._client, this._storage);
+  ScsOAuthProvider? _oauthProvider;
+  ScsOAuthConfig? _oauthConfig;
+  String _callbackScheme = 'scs';
+
+  AuthService(this._client, this._storage, this._baseUrl);
+
+  /// Configures OAuth providers for native sign-in flows.
+  ///
+  /// Call this method to enable native OAuth sign-in methods like
+  /// [scsSignInWithGoogle], [scsSignInWithApple], etc.
+  ///
+  /// Example:
+  /// ```dart
+  /// scs.auth.configureOAuth(
+  ///   config: ScsOAuthConfig(
+  ///     google: GoogleOAuthConfig(
+  ///       iosClientId: 'your-ios-client-id',
+  ///       androidClientId: 'your-android-client-id',
+  ///       webClientId: 'your-web-client-id',
+  ///     ),
+  ///     apple: AppleOAuthConfig(
+  ///       serviceId: 'your-service-id',
+  ///     ),
+  ///   ),
+  ///   callbackScheme: 'myapp', // Your app's custom URL scheme
+  /// );
+  /// ```
+  void configureOAuth({
+    required ScsOAuthConfig config,
+    String callbackScheme = 'scs',
+  }) {
+    _oauthConfig = config;
+    _callbackScheme = callbackScheme;
+    _oauthProvider = ScsOAuthProvider(
+      config: config,
+      baseUrl: _baseUrl,
+      callbackScheme: callbackScheme,
+    );
+  }
+
+  /// Gets the OAuth provider instance.
+  ///
+  /// Throws if OAuth is not configured. Call [configureOAuth] first.
+  ScsOAuthProvider get oauthProvider {
+    if (_oauthProvider == null) {
+      throw ScsException.auth(
+        'OAuth is not configured. Call configureOAuth() first.',
+      );
+    }
+    return _oauthProvider!;
+  }
+
+  /// Whether OAuth is configured.
+  bool get isOAuthConfigured => _oauthProvider != null;
 
   /// Gets the currently signed-in user, or null if not signed in.
   ScsUser? get currentUser => _currentUser;
@@ -549,6 +605,234 @@ class AuthService {
       body: {'code': code},
     );
   }
+
+  // ============== SCS Native OAuth Sign-In Methods ==============
+  //
+  // These methods handle the complete OAuth flow natively without
+  // requiring external plugins like google_sign_in or sign_in_with_apple.
+  // Call configureOAuth() before using these methods.
+
+  /// Signs in with Google using native SCS OAuth flow.
+  ///
+  /// This method handles the complete Google sign-in flow without requiring
+  /// the google_sign_in plugin. It opens a web view for authentication and
+  /// exchanges the authorization code with the SCS backend.
+  ///
+  /// Make sure to call [configureOAuth] with Google configuration first.
+  ///
+  /// Example:
+  /// ```dart
+  /// // Configure OAuth first
+  /// scs.auth.configureOAuth(
+  ///   config: ScsOAuthConfig(
+  ///     google: GoogleOAuthConfig(
+  ///       iosClientId: 'your-ios-client-id.apps.googleusercontent.com',
+  ///       androidClientId: 'your-android-client-id.apps.googleusercontent.com',
+  ///       webClientId: 'your-web-client-id.apps.googleusercontent.com',
+  ///     ),
+  ///   ),
+  ///   callbackScheme: 'com.yourapp',
+  /// );
+  ///
+  /// // Then sign in
+  /// final user = await scs.auth.scsSignInWithGoogle();
+  /// ```
+  Future<ScsUser> scsSignInWithGoogle() async {
+    final result = await oauthProvider.signInWithGoogle();
+    return _completeOAuthSignIn(result);
+  }
+
+  /// Signs in with Apple using native SCS OAuth flow.
+  ///
+  /// This method handles the complete Apple sign-in flow without requiring
+  /// the sign_in_with_apple plugin. On iOS/macOS, it uses the native Apple
+  /// Sign In. On other platforms, it uses the web-based OAuth flow.
+  ///
+  /// Make sure to call [configureOAuth] with Apple configuration first.
+  ///
+  /// Example:
+  /// ```dart
+  /// scs.auth.configureOAuth(
+  ///   config: ScsOAuthConfig(
+  ///     apple: AppleOAuthConfig(
+  ///       serviceId: 'com.yourapp.service',
+  ///     ),
+  ///   ),
+  ///   callbackScheme: 'com.yourapp',
+  /// );
+  ///
+  /// final user = await scs.auth.scsSignInWithApple();
+  /// ```
+  Future<ScsUser> scsSignInWithApple() async {
+    final result = await oauthProvider.signInWithApple();
+    return _completeOAuthSignIn(result);
+  }
+
+  /// Signs in with Facebook using native SCS OAuth flow.
+  ///
+  /// This method handles the complete Facebook sign-in flow without requiring
+  /// the flutter_facebook_auth plugin.
+  ///
+  /// Make sure to call [configureOAuth] with Facebook configuration first.
+  ///
+  /// Example:
+  /// ```dart
+  /// scs.auth.configureOAuth(
+  ///   config: ScsOAuthConfig(
+  ///     facebook: FacebookOAuthConfig(
+  ///       appId: 'your-facebook-app-id',
+  ///     ),
+  ///   ),
+  ///   callbackScheme: 'fb123456789',
+  /// );
+  ///
+  /// final user = await scs.auth.scsSignInWithFacebook();
+  /// ```
+  Future<ScsUser> scsSignInWithFacebook() async {
+    final result = await oauthProvider.signInWithFacebook();
+    return _completeOAuthSignIn(result);
+  }
+
+  /// Signs in with GitHub using native SCS OAuth flow.
+  ///
+  /// This method handles the complete GitHub sign-in flow without requiring
+  /// any external plugins.
+  ///
+  /// Make sure to call [configureOAuth] with GitHub configuration first.
+  ///
+  /// Example:
+  /// ```dart
+  /// scs.auth.configureOAuth(
+  ///   config: ScsOAuthConfig(
+  ///     github: GitHubOAuthConfig(
+  ///       clientId: 'your-github-client-id',
+  ///     ),
+  ///   ),
+  ///   callbackScheme: 'com.yourapp',
+  /// );
+  ///
+  /// final user = await scs.auth.scsSignInWithGitHub();
+  /// ```
+  Future<ScsUser> scsSignInWithGitHub() async {
+    final result = await oauthProvider.signInWithGitHub();
+    return _completeOAuthSignIn(result);
+  }
+
+  /// Signs in with Twitter/X using native SCS OAuth flow.
+  ///
+  /// This method handles the complete Twitter sign-in flow using OAuth 2.0
+  /// without requiring any external plugins.
+  ///
+  /// Make sure to call [configureOAuth] with Twitter configuration first.
+  ///
+  /// Example:
+  /// ```dart
+  /// scs.auth.configureOAuth(
+  ///   config: ScsOAuthConfig(
+  ///     twitter: TwitterOAuthConfig(
+  ///       apiKey: 'your-twitter-api-key',
+  ///     ),
+  ///   ),
+  ///   callbackScheme: 'com.yourapp',
+  /// );
+  ///
+  /// final user = await scs.auth.scsSignInWithTwitter();
+  /// ```
+  Future<ScsUser> scsSignInWithTwitter() async {
+    final result = await oauthProvider.signInWithTwitter();
+    return _completeOAuthSignIn(result);
+  }
+
+  /// Signs in with Microsoft using native SCS OAuth flow.
+  ///
+  /// This method handles the complete Microsoft sign-in flow without requiring
+  /// any external plugins.
+  ///
+  /// Make sure to call [configureOAuth] with Microsoft configuration first.
+  ///
+  /// Example:
+  /// ```dart
+  /// scs.auth.configureOAuth(
+  ///   config: ScsOAuthConfig(
+  ///     microsoft: MicrosoftOAuthConfig(
+  ///       clientId: 'your-azure-client-id',
+  ///       tenantId: 'common', // or specific tenant ID
+  ///     ),
+  ///   ),
+  ///   callbackScheme: 'msauth.com.yourapp',
+  /// );
+  ///
+  /// final user = await scs.auth.scsSignInWithMicrosoft();
+  /// ```
+  Future<ScsUser> scsSignInWithMicrosoft() async {
+    final result = await oauthProvider.signInWithMicrosoft();
+    return _completeOAuthSignIn(result);
+  }
+
+  /// Signs in with a custom OAuth provider using native SCS OAuth flow.
+  ///
+  /// This method allows you to authenticate with any OAuth 2.0 provider.
+  ///
+  /// Example:
+  /// ```dart
+  /// final user = await scs.auth.scsSignInWithOAuth(
+  ///   provider: 'discord',
+  ///   authorizationUrl: 'https://discord.com/api/oauth2/authorize',
+  ///   clientId: 'your-discord-client-id',
+  ///   scopes: ['identify', 'email'],
+  /// );
+  /// ```
+  Future<ScsUser> scsSignInWithOAuth({
+    required String provider,
+    required String authorizationUrl,
+    required String clientId,
+    String? redirectUri,
+    List<String> scopes = const [],
+    bool usePkce = true,
+    Map<String, String>? additionalParams,
+  }) async {
+    final result = await oauthProvider.signInWithOAuth(
+      provider: provider,
+      authorizationUrl: authorizationUrl,
+      clientId: clientId,
+      redirectUri: redirectUri,
+      scopes: scopes,
+      usePkce: usePkce,
+      additionalParams: additionalParams,
+    );
+    return _completeOAuthSignIn(result);
+  }
+
+  /// Completes the OAuth sign-in by exchanging tokens with the backend.
+  Future<ScsUser> _completeOAuthSignIn(OAuthResult result) async {
+    final response = await _client.post(
+      'auth/project/oauth/${result.provider}',
+      body: {
+        if (result.authorizationCode != null) 'code': result.authorizationCode,
+        if (result.idToken != null) 'idToken': result.idToken,
+        if (result.accessToken != null) 'accessToken': result.accessToken,
+        if (result.additionalData != null) ...result.additionalData!,
+      },
+    );
+
+    final userData = response['user'] as Map<String, dynamic>? ?? response;
+    final token = response['token'] as String?;
+
+    if (token == null) {
+      throw ScsException.auth('No token received from server');
+    }
+
+    final user = ScsUser.fromJson(userData, token: token);
+    await _setCurrentUser(user);
+
+    return user;
+  }
+
+  /// Gets the configured callback scheme for OAuth.
+  String get oauthCallbackScheme => _callbackScheme;
+
+  /// Gets the OAuth configuration.
+  ScsOAuthConfig? get oauthConfig => _oauthConfig;
 
   /// Restores the auth session from storage.
   ///
