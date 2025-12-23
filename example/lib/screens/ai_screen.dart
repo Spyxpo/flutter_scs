@@ -20,6 +20,17 @@ class _AiScreenState extends State<AiScreen>
   List<ChatMessage> _chatMessages = [];
   bool _chatLoading = false;
 
+  // Coding Chatbot
+  final _codingChatController = TextEditingController();
+  final _codingScrollController = ScrollController();
+  List<ChatMessage> _codingMessages = [];
+  bool _codingLoading = false;
+  final _systemPromptController = TextEditingController(
+    text: 'You are an expert coding assistant. Provide clean, efficient, and well-documented code solutions. Explain your code when asked.',
+  );
+  double _temperature = 0.7;
+  int _maxTokens = 2048;
+
   // Completion
   final _promptController = TextEditingController();
   String? _completionResult;
@@ -33,6 +44,7 @@ class _AiScreenState extends State<AiScreen>
   // Models & Stats
   List<AiModel> _models = [];
   String? _selectedModel;
+  String? _selectedCodingModel;
   Map<String, dynamic> _stats = {};
 
   // Agents
@@ -53,7 +65,7 @@ class _AiScreenState extends State<AiScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _fetchModels();
     _fetchAgents();
     _fetchConversations();
@@ -65,6 +77,9 @@ class _AiScreenState extends State<AiScreen>
     _tabController.dispose();
     _chatController.dispose();
     _chatScrollController.dispose();
+    _codingChatController.dispose();
+    _codingScrollController.dispose();
+    _systemPromptController.dispose();
     _promptController.dispose();
     _imagePromptController.dispose();
     _agentInputController.dispose();
@@ -158,6 +173,157 @@ class _AiScreenState extends State<AiScreen>
     setState(() {
       _chatMessages = [];
     });
+  }
+
+  // Coding chatbot methods
+  Future<void> _sendCodingMessage() async {
+    final text = _codingChatController.text.trim();
+    if (text.isEmpty) return;
+
+    setState(() {
+      _codingMessages.add(ChatMessage.user(text));
+      _codingLoading = true;
+    });
+    _codingChatController.clear();
+    _scrollCodingToBottom();
+
+    try {
+      final response = await ScsExampleApp.scs!.ai.chat(
+        messages: _codingMessages,
+        model: _selectedCodingModel ?? 'codellama',
+        temperature: _temperature,
+        maxTokens: _maxTokens,
+        systemPrompt: _systemPromptController.text.trim().isNotEmpty
+            ? _systemPromptController.text.trim()
+            : null,
+      );
+      setState(() {
+        _codingMessages.add(ChatMessage.assistant(response.message.content));
+      });
+      _scrollCodingToBottom();
+    } on ScsException catch (e) {
+      setState(() {
+        _codingMessages.add(ChatMessage.assistant('Error: ${e.message}'));
+      });
+    } finally {
+      if (mounted) setState(() => _codingLoading = false);
+    }
+  }
+
+  void _scrollCodingToBottom() {
+    if (_codingScrollController.hasClients) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _codingScrollController.animateTo(
+          _codingScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      });
+    }
+  }
+
+  void _clearCodingChat() {
+    setState(() {
+      _codingMessages = [];
+    });
+  }
+
+  void _showCodingSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setBottomSheetState) => DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) => SingleChildScrollView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.settings, size: 24),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Coding Assistant Settings',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'System Prompt',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _systemPromptController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Instructions for the AI assistant...',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Temperature: ${_temperature.toStringAsFixed(1)}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Lower = more focused, Higher = more creative',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Slider(
+                  value: _temperature,
+                  min: 0.0,
+                  max: 2.0,
+                  divisions: 20,
+                  label: _temperature.toStringAsFixed(1),
+                  onChanged: (value) {
+                    setBottomSheetState(() {});
+                    setState(() => _temperature = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Max Tokens: $_maxTokens',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Maximum response length',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Slider(
+                  value: _maxTokens.toDouble(),
+                  min: 256,
+                  max: 8192,
+                  divisions: 31,
+                  label: _maxTokens.toString(),
+                  onChanged: (value) {
+                    setBottomSheetState(() {});
+                    setState(() => _maxTokens = value.round());
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _generateCompletion() async {
@@ -526,6 +692,7 @@ class _AiScreenState extends State<AiScreen>
           isScrollable: true,
           tabs: const [
             Tab(text: 'Chat', icon: Icon(Icons.chat)),
+            Tab(text: 'Coding', icon: Icon(Icons.code)),
             Tab(text: 'Complete', icon: Icon(Icons.edit_note)),
             Tab(text: 'Image', icon: Icon(Icons.image)),
             Tab(text: 'Agents', icon: Icon(Icons.psychology)),
@@ -537,6 +704,7 @@ class _AiScreenState extends State<AiScreen>
         controller: _tabController,
         children: [
           _buildChatTab(),
+          _buildCodingTab(),
           _buildCompletionTab(),
           _buildImageTab(),
           _buildAgentsTab(),
@@ -664,6 +832,227 @@ class _AiScreenState extends State<AiScreen>
                 IconButton.filled(
                   onPressed: _chatLoading ? null : _sendChatMessage,
                   icon: const Icon(Icons.send),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCodingTab() {
+    return Column(
+      children: [
+        // Header with settings
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            border: Border(
+              bottom: BorderSide(color: Theme.of(context).dividerColor),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.code, color: Colors.green.shade700, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Coding Assistant',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const Spacer(),
+              if (_models.isNotEmpty)
+                DropdownButton<String>(
+                  value: _selectedCodingModel,
+                  hint: const Text('codellama'),
+                  isDense: true,
+                  underline: const SizedBox(),
+                  items: _models.map((model) {
+                    return DropdownMenuItem(
+                      value: model.name,
+                      child: Text(model.displayName ?? model.name),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() => _selectedCodingModel = value);
+                  },
+                ),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: _showCodingSettings,
+                tooltip: 'Settings',
+              ),
+            ],
+          ),
+        ),
+        // Messages
+        Expanded(
+          child: _codingMessages.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.code,
+                        size: 64,
+                        color: Colors.green.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Ask for code help',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Get help with coding, debugging, and explanations',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey.shade500,
+                            ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          ActionChip(
+                            label: const Text('Write a function'),
+                            onPressed: () {
+                              _codingChatController.text = 'Write a function that ';
+                            },
+                          ),
+                          ActionChip(
+                            label: const Text('Explain code'),
+                            onPressed: () {
+                              _codingChatController.text = 'Explain this code: ';
+                            },
+                          ),
+                          ActionChip(
+                            label: const Text('Debug'),
+                            onPressed: () {
+                              _codingChatController.text = 'Help me debug this: ';
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  controller: _codingScrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _codingMessages.length,
+                  itemBuilder: (context, index) {
+                    final message = _codingMessages[index];
+                    final isUser = message.role == 'user';
+
+                    return Align(
+                      alignment:
+                          isUser ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.85,
+                        ),
+                        child: Card(
+                          color: isUser
+                              ? Colors.green.shade100
+                              : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isUser ? Icons.person : Icons.code,
+                                      size: 16,
+                                      color: isUser ? Colors.green.shade700 : Colors.green.shade600,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isUser ? 'You' : 'Code Assistant',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade700,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                SelectableText(
+                                  message.content,
+                                  style: TextStyle(
+                                    fontFamily: isUser ? null : 'monospace',
+                                    fontSize: isUser ? 14 : 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        if (_codingLoading)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: LinearProgressIndicator(
+              color: Colors.green.shade600,
+            ),
+          ),
+        // Input
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(
+              top: BorderSide(color: Theme.of(context).dividerColor),
+            ),
+          ),
+          child: SafeArea(
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: _clearCodingChat,
+                  tooltip: 'Clear Chat',
+                ),
+                Expanded(
+                  child: TextFormField(
+                    controller: _codingChatController,
+                    decoration: InputDecoration(
+                      hintText: 'Ask for code help...',
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    textInputAction: TextInputAction.send,
+                    onFieldSubmitted: (_) => _sendCodingMessage(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: _codingLoading ? null : _sendCodingMessage,
+                  icon: const Icon(Icons.send),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                  ),
                 ),
               ],
             ),

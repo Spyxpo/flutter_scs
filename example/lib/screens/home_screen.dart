@@ -12,6 +12,7 @@ import 'ml_screen.dart';
 import 'ai_screen.dart';
 import 'posts_screen.dart';
 import 'calls_screen.dart';
+import 'database_examples_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -190,6 +191,15 @@ class HomeScreen extends StatelessWidget {
                 color: Colors.amber,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const AiScreen()),
+                ),
+              ),
+              _FeatureCard(
+                icon: Icons.code,
+                title: 'DB Examples',
+                subtitle: 'eaZI & RelaDB',
+                color: Colors.deepOrange,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DatabaseExamplesScreen()),
                 ),
               ),
             ],

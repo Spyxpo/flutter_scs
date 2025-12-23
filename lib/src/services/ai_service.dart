@@ -27,19 +27,35 @@ class AiService {
   }
 
   /// Sends a chat message and gets a response.
+  ///
+  /// Parameters:
+  /// - [messages]: List of chat messages for context
+  /// - [model]: Model to use (e.g., 'llama3.2', 'codellama')
+  /// - [temperature]: Response randomness (0.0-2.0, default 0.7)
+  /// - [maxTokens]: Maximum response length (default 2048)
+  /// - [systemPrompt]: System instructions for the AI
+  /// - [conversationId]: Optional conversation ID to continue a conversation
   Future<ChatResponse> chat({
     required List<ChatMessage> messages,
     String? model,
     double? temperature,
     int? maxTokens,
+    String? systemPrompt,
+    String? conversationId,
   }) async {
+    // If there's a message in the list, extract it for the API
+    final String? message = messages.isNotEmpty ? messages.last.content : null;
+
     final response = await _client.post(
       'ai/chat',
       body: {
+        if (message != null) 'message': message,
         'messages': messages.map((m) => m.toJson()).toList(),
         if (model != null) 'model': model,
         if (temperature != null) 'temperature': temperature,
         if (maxTokens != null) 'maxTokens': maxTokens,
+        if (systemPrompt != null) 'systemPrompt': systemPrompt,
+        if (conversationId != null) 'conversationId': conversationId,
       },
     );
     return ChatResponse.fromJson(response);
