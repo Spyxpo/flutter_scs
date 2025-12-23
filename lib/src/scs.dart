@@ -8,6 +8,7 @@ import 'services/remote_config_service.dart';
 import 'services/functions_service.dart';
 import 'services/ml_service.dart';
 import 'services/ai_service.dart';
+import 'services/call_service.dart';
 import 'utils/http_client.dart';
 import 'utils/session_storage.dart';
 
@@ -49,6 +50,7 @@ class SCS {
   late final FunctionsService _functions;
   late final MlService _ml;
   late final AiService _ai;
+  late final CallService _calls;
 
   bool _initialized = false;
 
@@ -69,6 +71,7 @@ class SCS {
     _functions = FunctionsService(_httpClient, config);
     _ml = MlService(_httpClient);
     _ai = AiService(_httpClient);
+    _calls = CallService(_httpClient, config);
   }
 
   /// Initializes the SCS SDK from a configuration object.
@@ -131,6 +134,9 @@ class SCS {
   /// Gets the AI service.
   AiService get ai => _ai;
 
+  /// Gets the call service for voice/video calls, group calls, and live streaming.
+  CallService get calls => _calls;
+
   /// Gets the project ID.
   String get projectId => config.projectId;
 
@@ -140,6 +146,7 @@ class SCS {
   /// Disposes of resources used by the SDK.
   void dispose() {
     _realtime.dispose();
+    _calls.dispose();
     _httpClient.close();
   }
 }

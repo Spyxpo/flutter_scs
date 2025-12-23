@@ -19,6 +19,7 @@ export 'src/services/remote_config_service.dart';
 export 'src/services/functions_service.dart';
 export 'src/services/ml_service.dart';
 export 'src/services/ai_service.dart';
+export 'src/services/call_service.dart';
 
 // Models
 export 'src/models/user.dart';
