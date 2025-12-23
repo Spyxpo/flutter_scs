@@ -67,7 +67,7 @@ class CollectionReference {
   Future<ScsDocument> add(Map<String, dynamic> data) async {
     final response = await _client.post(
       'database/collections/$_path/documents',
-      body: data,
+      body: {'data': data},
     );
     final docData = response['document'] as Map<String, dynamic>? ?? response;
     return ScsDocument.fromJson(docData);
@@ -232,7 +232,7 @@ class DocumentReference {
   Future<void> set(Map<String, dynamic> data) async {
     await _client.put(
       'database/collections/$_collectionPath/documents/$_id',
-      body: data,
+      body: {'data': data, 'merge': false},
     );
   }
 
@@ -240,7 +240,7 @@ class DocumentReference {
   Future<void> update(Map<String, dynamic> data) async {
     await _client.put(
       'database/collections/$_collectionPath/documents/$_id',
-      body: data,
+      body: {'data': data, 'merge': true},
     );
   }
 

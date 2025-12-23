@@ -26,16 +26,25 @@ class _CallsScreenState extends State<CallsScreen>
   bool _inCall = false;
   bool _videoEnabled = true;
   bool _audioEnabled = true;
+  bool _isRecording = false;
+  bool _isTranscribing = false;
+  List<Participant> _participants = [];
+  List<Map<String, dynamic>> _recordings = [];
+  Map<String, dynamic>? _transcription;
+  List<Map<String, dynamic>> _chatMessages = [];
+  final _chatController = TextEditingController();
 
   // Subscriptions
   StreamSubscription? _participantJoinedSub;
   StreamSubscription? _participantLeftSub;
   StreamSubscription? _callEndedSub;
+  StreamSubscription? _chatMessageSub;
+  StreamSubscription? _transcriptionSub;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _fetchCalls();
     _fetchStats();
   }
@@ -43,9 +52,12 @@ class _CallsScreenState extends State<CallsScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _chatController.dispose();
     _participantJoinedSub?.cancel();
     _participantLeftSub?.cancel();
     _callEndedSub?.cancel();
+    _chatMessageSub?.cancel();
+    _transcriptionSub?.cancel();
     if (_inCall) {
       ScsExampleApp.scs!.calls.leaveCall();
     }
@@ -74,6 +86,33 @@ class _CallsScreenState extends State<CallsScreen>
       setState(() => _stats = stats);
     } catch (e) {
       // Ignore errors for stats
+    }
+  }
+
+  Future<void> _fetchParticipants(String callId) async {
+    try {
+      final participants = await ScsExampleApp.scs!.calls.getParticipants(callId);
+      setState(() => _participants = participants);
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  Future<void> _fetchRecordings(String callId) async {
+    try {
+      final recordings = await ScsExampleApp.scs!.calls.listRecordings(callId);
+      setState(() => _recordings = recordings);
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  Future<void> _fetchTranscription(String callId) async {
+    try {
+      final transcription = await ScsExampleApp.scs!.calls.getTranscription(callId);
+      setState(() => _transcription = transcription);
+    } catch (e) {
+      // Ignore
     }
   }
 
@@ -167,7 +206,13 @@ class _CallsScreenState extends State<CallsScreen>
         _inCall = true;
         _videoEnabled = call.type == CallType.video;
         _audioEnabled = true;
+        _chatMessages = [];
       });
+
+      // Fetch participants and recordings
+      await _fetchParticipants(call.callId);
+      await _fetchRecordings(call.callId);
+      await _fetchTranscription(call.callId);
 
       // Subscribe to events
       _setupCallListeners();
@@ -186,6 +231,7 @@ class _CallsScreenState extends State<CallsScreen>
 
   void _setupCallListeners() {
     _participantJoinedSub = ScsExampleApp.scs!.calls.onParticipantJoined.listen((participant) {
+      setState(() => _participants.add(participant));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -197,6 +243,9 @@ class _CallsScreenState extends State<CallsScreen>
     });
 
     _participantLeftSub = ScsExampleApp.scs!.calls.onParticipantLeft.listen((participant) {
+      setState(() {
+        _participants.removeWhere((p) => p.participantId == participant.participantId);
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -210,6 +259,22 @@ class _CallsScreenState extends State<CallsScreen>
     _callEndedSub = ScsExampleApp.scs!.calls.onCallEnded.listen((data) {
       _leaveCall();
     });
+
+    _chatMessageSub = ScsExampleApp.scs!.calls.onChatMessage.listen((data) {
+      setState(() => _chatMessages.add(data));
+    });
+
+    _transcriptionSub = ScsExampleApp.scs!.calls.onTranscriptionSegment.listen((data) {
+      // Handle live transcription
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Transcription: ${data['text'] ?? ''}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    });
   }
 
   void _showActiveCallSheet() {
@@ -217,77 +282,311 @@ class _CallsScreenState extends State<CallsScreen>
       context: context,
       isDismissible: false,
       enableDrag: false,
+      isScrollControlled: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
-          return Container(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      _activeCall?.type == CallType.video
-                          ? Icons.videocam
-                          : Icons.call,
-                      size: 32,
-                      color: Colors.green,
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.4,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (context, scrollController) => SingleChildScrollView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _activeCall?.type == CallType.video
+                            ? Icons.videocam
+                            : Icons.call,
+                        size: 32,
+                        color: Colors.green,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'In Call',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'Room: ${_activeCall?.roomId ?? 'Unknown'}',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'In Call',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Recording/Transcription status
+                  if (_isRecording || _isTranscribing)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_isRecording)
+                          Chip(
+                            label: const Text('Recording'),
+                            avatar: const Icon(Icons.fiber_manual_record, color: Colors.red, size: 12),
+                            backgroundColor: Colors.red.shade100,
+                          ),
+                        if (_isRecording && _isTranscribing) const SizedBox(width: 8),
+                        if (_isTranscribing)
+                          Chip(
+                            label: const Text('Transcribing'),
+                            avatar: const Icon(Icons.closed_caption, size: 12),
+                            backgroundColor: Colors.blue.shade100,
+                          ),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Room: ${_activeCall?.roomId ?? 'Unknown'}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _CallControlButton(
-                      icon: _audioEnabled ? Icons.mic : Icons.mic_off,
-                      label: _audioEnabled ? 'Mute' : 'Unmute',
-                      color: _audioEnabled ? Colors.grey : Colors.red,
-                      onPressed: () async {
-                        await ScsExampleApp.scs!.calls.updateMediaState(
-                          audio: !_audioEnabled,
-                        );
-                        setState(() => _audioEnabled = !_audioEnabled);
-                        setSheetState(() {});
-                      },
-                    ),
-                    if (_activeCall?.type == CallType.video)
+                  const SizedBox(height: 16),
+
+                  // Call controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
                       _CallControlButton(
-                        icon: _videoEnabled ? Icons.videocam : Icons.videocam_off,
-                        label: _videoEnabled ? 'Stop Video' : 'Start Video',
-                        color: _videoEnabled ? Colors.grey : Colors.red,
+                        icon: _audioEnabled ? Icons.mic : Icons.mic_off,
+                        label: _audioEnabled ? 'Mute' : 'Unmute',
+                        color: _audioEnabled ? Colors.grey : Colors.red,
                         onPressed: () async {
                           await ScsExampleApp.scs!.calls.updateMediaState(
-                            video: !_videoEnabled,
+                            audio: !_audioEnabled,
                           );
-                          setState(() => _videoEnabled = !_videoEnabled);
+                          setState(() => _audioEnabled = !_audioEnabled);
                           setSheetState(() {});
                         },
                       ),
-                    _CallControlButton(
-                      icon: Icons.call_end,
-                      label: 'End',
-                      color: Colors.red,
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _leaveCall();
-                      },
+                      if (_activeCall?.type == CallType.video)
+                        _CallControlButton(
+                          icon: _videoEnabled ? Icons.videocam : Icons.videocam_off,
+                          label: _videoEnabled ? 'Stop Video' : 'Start Video',
+                          color: _videoEnabled ? Colors.grey : Colors.red,
+                          onPressed: () async {
+                            await ScsExampleApp.scs!.calls.updateMediaState(
+                              video: !_videoEnabled,
+                            );
+                            setState(() => _videoEnabled = !_videoEnabled);
+                            setSheetState(() {});
+                          },
+                        ),
+                      _CallControlButton(
+                        icon: Icons.call_end,
+                        label: 'End',
+                        color: Colors.red,
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _leaveCall();
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Recording & Transcription controls
+                  Text(
+                    'Controls',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            try {
+                              if (_isRecording) {
+                                await ScsExampleApp.scs!.calls.stopRecording(_activeCall!.callId);
+                                setState(() => _isRecording = false);
+                              } else {
+                                await ScsExampleApp.scs!.calls.startRecording(_activeCall!.callId);
+                                setState(() => _isRecording = true);
+                              }
+                              setSheetState(() {});
+                            } catch (e) {
+                              messenger.showSnackBar(
+                                SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          },
+                          icon: Icon(
+                            _isRecording ? Icons.stop : Icons.fiber_manual_record,
+                            color: _isRecording ? Colors.grey : Colors.red,
+                          ),
+                          label: Text(_isRecording ? 'Stop Rec' : 'Record'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            try {
+                              if (_isTranscribing) {
+                                await ScsExampleApp.scs!.calls.stopTranscription(_activeCall!.callId);
+                                setState(() => _isTranscribing = false);
+                              } else {
+                                await ScsExampleApp.scs!.calls.startTranscription(_activeCall!.callId);
+                                setState(() => _isTranscribing = true);
+                              }
+                              setSheetState(() {});
+                            } catch (e) {
+                              messenger.showSnackBar(
+                                SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          },
+                          icon: Icon(
+                            _isTranscribing ? Icons.closed_caption_disabled : Icons.closed_caption,
+                            color: _isTranscribing ? Colors.blue : Colors.grey,
+                          ),
+                          label: Text(_isTranscribing ? 'Stop CC' : 'Transcribe'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            ScsExampleApp.scs!.calls.raiseHand(true);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Hand raised!'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.pan_tool),
+                          label: const Text('Raise Hand'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            _showReactionPicker(setSheetState);
+                          },
+                          icon: const Icon(Icons.emoji_emotions),
+                          label: const Text('React'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Participants
+                  Text(
+                    'Participants (${_participants.length})',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  if (_participants.isEmpty)
+                    const Text('No participants yet')
+                  else
+                    ...List.generate(_participants.length, (index) {
+                      final participant = _participants[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          child: Text(participant.displayName[0].toUpperCase()),
+                        ),
+                        title: Text(participant.displayName),
+                        subtitle: Text(participant.role.name),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              participant.mediaState['audio'] == true
+                                  ? Icons.mic
+                                  : Icons.mic_off,
+                              size: 18,
+                              color: participant.mediaState['audio'] == true
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              participant.mediaState['video'] == true
+                                  ? Icons.videocam
+                                  : Icons.videocam_off,
+                              size: 18,
+                              color: participant.mediaState['video'] == true
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 16),
+
+                  // Chat
+                  Text(
+                    'Chat',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 150,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-              ],
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: _chatMessages.isEmpty
+                              ? const Center(child: Text('No messages yet'))
+                              : ListView.builder(
+                                  padding: const EdgeInsets.all(8),
+                                  itemCount: _chatMessages.length,
+                                  itemBuilder: (context, index) {
+                                    final msg = _chatMessages[index];
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      child: Text(
+                                        '${msg['displayName']}: ${msg['message']}',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _chatController,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Type a message...',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                  onSubmitted: (_) => _sendChatMessage(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.send),
+                                onPressed: _sendChatMessage,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -295,15 +594,66 @@ class _CallsScreenState extends State<CallsScreen>
     );
   }
 
+  void _showReactionPicker(StateSetter setSheetState) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 16,
+          runSpacing: 16,
+          children: ['👍', '❤️', '😂', '😮', '😢', '👏', '🎉', '🔥'].map((emoji) {
+            return InkWell(
+              onTap: () {
+                ScsExampleApp.scs!.calls.sendReaction(emoji);
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Sent $emoji'),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
+              child: Text(emoji, style: const TextStyle(fontSize: 32)),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendChatMessage() async {
+    final message = _chatController.text.trim();
+    if (message.isEmpty) return;
+
+    try {
+      await ScsExampleApp.scs!.calls.sendChatMessage(message);
+      _chatController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   void _leaveCall() {
     ScsExampleApp.scs!.calls.leaveCall();
     _participantJoinedSub?.cancel();
     _participantLeftSub?.cancel();
     _callEndedSub?.cancel();
+    _chatMessageSub?.cancel();
+    _transcriptionSub?.cancel();
 
     setState(() {
       _activeCall = null;
       _inCall = false;
+      _isRecording = false;
+      _isTranscribing = false;
+      _participants = [];
+      _chatMessages = [];
     });
 
     if (mounted) {
@@ -358,6 +708,69 @@ class _CallsScreenState extends State<CallsScreen>
         );
       }
     }
+  }
+
+  Future<void> _showCallRecordings(Call call) async {
+    await _fetchRecordings(call.callId);
+    await _fetchTranscription(call.callId);
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Call ${call.roomId}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Recordings (${_recordings.length})',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                if (_recordings.isEmpty)
+                  const Text('No recordings')
+                else
+                  ...List.generate(_recordings.length, (index) {
+                    final recording = _recordings[index];
+                    return ListTile(
+                      leading: const Icon(Icons.video_file),
+                      title: Text(recording['format'] ?? 'Recording'),
+                      subtitle: Text('${recording['duration'] ?? 0} seconds'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.download),
+                        onPressed: () {
+                          // Handle download
+                        },
+                      ),
+                    );
+                  }),
+                const Divider(),
+                Text(
+                  'Transcription',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                if (_transcription == null)
+                  const Text('No transcription')
+                else
+                  Text(_transcription!['text'] ?? 'No text'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCreateCallOptions() {
@@ -428,6 +841,7 @@ class _CallsScreenState extends State<CallsScreen>
           controller: _tabController,
           tabs: const [
             Tab(text: 'Active Calls', icon: Icon(Icons.call)),
+            Tab(text: 'Recordings', icon: Icon(Icons.video_library)),
             Tab(text: 'Stats', icon: Icon(Icons.analytics)),
           ],
         ),
@@ -436,6 +850,7 @@ class _CallsScreenState extends State<CallsScreen>
         controller: _tabController,
         children: [
           _buildCallsTab(),
+          _buildRecordingsTab(),
           _buildStatsTab(),
         ],
       ),
@@ -497,8 +912,52 @@ class _CallsScreenState extends State<CallsScreen>
             call: call,
             onJoin: () => _showJoinCallDialog(call),
             onEnd: () => _endCall(call),
+            onViewRecordings: () => _showCallRecordings(call),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildRecordingsTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.video_library_outlined,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Call Recordings',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Select a call to view its recordings',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 24),
+          if (_calls.isNotEmpty)
+            ...List.generate(_calls.take(5).length, (index) {
+              final call = _calls[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+                child: ListTile(
+                  leading: Icon(
+                    call.type == CallType.video ? Icons.videocam : Icons.call,
+                    color: call.type == CallType.video ? Colors.blue : Colors.green,
+                  ),
+                  title: Text('Call ${call.roomId}'),
+                  subtitle: Text('Duration: ${call.duration}s'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () => _showCallRecordings(call),
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -557,30 +1016,40 @@ class _CallsScreenState extends State<CallsScreen>
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 16),
-                  _FeatureRow(
+                  const _FeatureRow(
                     icon: Icons.videocam,
                     title: 'Video Calls',
                     subtitle: 'High-quality video conferencing',
                   ),
-                  _FeatureRow(
+                  const _FeatureRow(
                     icon: Icons.call,
                     title: 'Voice Calls',
                     subtitle: 'Crystal-clear audio calls',
                   ),
-                  _FeatureRow(
+                  const _FeatureRow(
                     icon: Icons.group,
                     title: 'Group Calls',
                     subtitle: 'Up to 50 participants',
                   ),
-                  _FeatureRow(
+                  const _FeatureRow(
                     icon: Icons.fiber_manual_record,
                     title: 'Recording',
                     subtitle: 'Record and save calls',
                   ),
-                  _FeatureRow(
+                  const _FeatureRow(
                     icon: Icons.closed_caption,
                     title: 'Transcription',
                     subtitle: 'Real-time speech-to-text',
+                  ),
+                  const _FeatureRow(
+                    icon: Icons.chat,
+                    title: 'In-call Chat',
+                    subtitle: 'Send messages during calls',
+                  ),
+                  const _FeatureRow(
+                    icon: Icons.emoji_emotions,
+                    title: 'Reactions',
+                    subtitle: 'Express yourself with emoji reactions',
                   ),
                 ],
               ),
@@ -596,11 +1065,13 @@ class _CallCard extends StatelessWidget {
   final Call call;
   final VoidCallback onJoin;
   final VoidCallback onEnd;
+  final VoidCallback onViewRecordings;
 
   const _CallCard({
     required this.call,
     required this.onJoin,
     required this.onEnd,
+    required this.onViewRecordings,
   });
 
   @override
@@ -648,6 +1119,13 @@ class _CallCard extends StatelessWidget {
                   'Max: ${call.maxParticipants}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                if (call.duration > 0) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '${call.duration}s',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ],
             ),
           ],
@@ -656,6 +1134,11 @@ class _CallCard extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              icon: const Icon(Icons.video_library, color: Colors.blue),
+              onPressed: onViewRecordings,
+              tooltip: 'View Recordings',
+            ),
             if (isActive)
               IconButton(
                 icon: const Icon(Icons.login, color: Colors.green),
