@@ -24,7 +24,7 @@ void main() async {
 }
 ```
 
-2. Run the app:
+1. Run the app:
 
 ```bash
 flutter run
