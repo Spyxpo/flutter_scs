@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_scs/flutter_scs.dart';
 import 'package:image_picker/image_picker.dart';
@@ -16,7 +17,8 @@ class MlScreen extends StatefulWidget {
 class _MlScreenState extends State<MlScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  File? _selectedImage;
+  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
   bool _loading = false;
   TextRecognitionResult? _textResult;
   ImageLabelingResult? _labelResult;
@@ -61,8 +63,10 @@ class _MlScreenState extends State<MlScreen>
     final picker = ImagePicker();
     final image = await picker.pickImage(source: source);
     if (image != null) {
+      final bytes = await image.readAsBytes();
       setState(() {
-        _selectedImage = File(image.path);
+        _selectedImage = image;
+        _selectedImageBytes = bytes;
         _textResult = null;
         _labelResult = null;
         _predictionResult = null;
@@ -99,7 +103,7 @@ class _MlScreenState extends State<MlScreen>
   }
 
   Future<void> _recognizeText() async {
-    if (_selectedImage == null) {
+    if (_selectedImage == null || _selectedImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select an image first'),
@@ -111,8 +115,10 @@ class _MlScreenState extends State<MlScreen>
 
     setState(() => _loading = true);
     try {
-      final result =
-          await ScsExampleApp.scs!.ml.recognizeTextFromFile(_selectedImage!);
+      final result = await ScsExampleApp.scs!.ml.recognizeText(
+        _selectedImageBytes!,
+        filename: _selectedImage!.name,
+      );
       setState(() => _textResult = result);
     } on ScsException catch (e) {
       if (mounted) {
@@ -126,7 +132,7 @@ class _MlScreenState extends State<MlScreen>
   }
 
   Future<void> _labelImage() async {
-    if (_selectedImage == null) {
+    if (_selectedImage == null || _selectedImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select an image first'),
@@ -138,8 +144,10 @@ class _MlScreenState extends State<MlScreen>
 
     setState(() => _loading = true);
     try {
-      final result =
-          await ScsExampleApp.scs!.ml.labelImageFromFile(_selectedImage!);
+      final result = await ScsExampleApp.scs!.ml.labelImage(
+        _selectedImageBytes!,
+        filename: _selectedImage!.name,
+      );
       setState(() => _labelResult = result);
     } on ScsException catch (e) {
       if (mounted) {
@@ -153,7 +161,7 @@ class _MlScreenState extends State<MlScreen>
   }
 
   Future<void> _runPrediction() async {
-    if (_selectedImage == null) {
+    if (_selectedImage == null || _selectedImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select an image first'),
@@ -175,9 +183,10 @@ class _MlScreenState extends State<MlScreen>
 
     setState(() => _loading = true);
     try {
-      final result = await ScsExampleApp.scs!.ml.predict(
+      final result = await ScsExampleApp.scs!.ml.predictFromBytes(
         _selectedModelId!,
-        _selectedImage!,
+        _selectedImageBytes!,
+        filename: _selectedImage!.name,
       );
       setState(() => _predictionResult = result);
     } on ScsException catch (e) {
@@ -335,13 +344,13 @@ class _MlScreenState extends State<MlScreen>
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: _selectedImage != null
+                child: _selectedImageBytes != null
                     ? Stack(
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.file(
-                              _selectedImage!,
+                            child: Image.memory(
+                              _selectedImageBytes!,
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
@@ -355,6 +364,7 @@ class _MlScreenState extends State<MlScreen>
                               onPressed: () {
                                 setState(() {
                                   _selectedImage = null;
+                                  _selectedImageBytes = null;
                                   _textResult = null;
                                   _labelResult = null;
                                   _predictionResult = null;

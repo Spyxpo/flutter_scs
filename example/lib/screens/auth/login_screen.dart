@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_scs/flutter_scs.dart';
 
@@ -381,7 +380,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            if (Platform.isIOS || Platform.isMacOS)
+            if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS))
               Expanded(
                 child: _OAuthButton(
                   icon: Icons.apple,

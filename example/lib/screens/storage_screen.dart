@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -84,9 +83,10 @@ class _StorageScreenState extends State<StorageScreen>
 
     setState(() => _uploading = true);
     try {
-      final file = File(pickedFile.path);
-      await ScsExampleApp.scs!.storage.upload(
-        file,
+      final bytes = await pickedFile.readAsBytes();
+      await ScsExampleApp.scs!.storage.uploadBytes(
+        bytes,
+        filename: pickedFile.name,
         folder: _currentFolder.isNotEmpty ? _currentFolder : null,
       );
       await _fetchFiles();
