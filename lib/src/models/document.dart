@@ -24,26 +24,56 @@ class ScsDocument {
   });
 
   /// Creates a document from a JSON map.
+  ///
+  /// The backend returns documents in this format:
+  /// ```json
+  /// {
+  ///   "id": "docId",
+  ///   "path": "collection/docId",
+  ///   "data": { ... actual document data ... },
+  ///   "createdAt": "2024-01-01T00:00:00.000Z",
+  ///   "updatedAt": "2024-01-01T00:00:00.000Z"
+  /// }
+  /// ```
   factory ScsDocument.fromJson(Map<String, dynamic> json) {
-    final id = json['_id'] as String? ?? json['id'] as String? ?? '';
-    final data = Map<String, dynamic>.from(json);
-    data.remove('_id');
+    // Get the document ID (supports both 'id' and '_id' formats)
+    final id = json['id'] as String? ?? json['_id'] as String? ?? json['docId'] as String? ?? '';
 
+    // Get the document data - it's nested under 'data' field from the backend
+    // If 'data' field exists, use it; otherwise fall back to the entire json (for backwards compatibility)
+    Map<String, dynamic> data;
+    if (json.containsKey('data') && json['data'] is Map) {
+      data = Map<String, dynamic>.from(json['data'] as Map);
+    } else {
+      // Fallback: treat the entire json as data (minus metadata fields)
+      data = Map<String, dynamic>.from(json);
+      data.remove('_id');
+      data.remove('id');
+      data.remove('docId');
+      data.remove('path');
+      data.remove('createdAt');
+      data.remove('updatedAt');
+      data.remove('subcollections');
+    }
+
+    // Parse timestamps
     DateTime? createdAt;
     DateTime? updatedAt;
 
     if (json['createdAt'] != null) {
       createdAt = DateTime.tryParse(json['createdAt'].toString());
-      data.remove('createdAt');
     }
     if (json['updatedAt'] != null) {
       updatedAt = DateTime.tryParse(json['updatedAt'].toString());
-      data.remove('updatedAt');
     }
+
+    // Get collection path if available
+    final collectionPath = json['path'] as String?;
 
     return ScsDocument(
       id: id,
       data: data,
+      collectionPath: collectionPath,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );

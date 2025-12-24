@@ -49,6 +49,7 @@ class ScsHttpClient {
   }) {
     final headers = <String, String>{
       'X-API-Key': config.apiKey,
+      'X-Database-Type': config.databaseTypeHeader,
       if (_userToken != null) 'Authorization': 'Bearer $_userToken',
       if (includeContentType) 'Content-Type': 'application/json',
       ...?additionalHeaders,

@@ -1,6 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Database type for the SCS SDK.
+enum ScsDatabaseType {
+  /// eaZI Database - File-based NoSQL, ideal for development.
+  eazi,
+
+  /// RelaDB (MongoDB) - Production-grade NoSQL with advanced features.
+  mongodb,
+}
+
 /// Configuration for the SCS SDK.
 class ScsConfig {
   /// The API key for authenticating requests.
@@ -12,11 +21,18 @@ class ScsConfig {
   /// The base URL for the SCS API.
   final String baseUrl;
 
+  /// The database type to use.
+  ///
+  /// - [ScsDatabaseType.eazi]: File-based NoSQL, ideal for development (default).
+  /// - [ScsDatabaseType.mongodb]: Production-grade NoSQL (RelaDB) with advanced features.
+  final ScsDatabaseType databaseType;
+
   /// Creates a new SCS configuration.
   const ScsConfig({
     required this.apiKey,
     required this.projectId,
     required this.baseUrl,
+    this.databaseType = ScsDatabaseType.eazi,
   });
 
   /// Creates a configuration from a JSON map.
@@ -52,6 +68,10 @@ class ScsConfig {
     projectId ??= json['projectId'] as String? ?? json['project_id'] as String?;
     baseUrl ??= json['baseUrl'] as String? ?? json['base_url'] as String?;
 
+    // Parse database type
+    final dbTypeStr = json['databaseType'] as String? ?? json['database_type'] as String? ?? 'eazi';
+    final databaseType = dbTypeStr == 'mongodb' ? ScsDatabaseType.mongodb : ScsDatabaseType.eazi;
+
     if (apiKey == null || apiKey.isEmpty) {
       throw ArgumentError('API key is required');
     }
@@ -66,6 +86,7 @@ class ScsConfig {
       apiKey: apiKey,
       projectId: projectId,
       baseUrl: baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl,
+      databaseType: databaseType,
     );
   }
 
@@ -92,11 +113,15 @@ class ScsConfig {
       'apiKey': apiKey,
       'projectId': projectId,
       'baseUrl': baseUrl,
+      'databaseType': databaseType.name,
     };
   }
 
+  /// Returns the database type as a string for the X-Database-Type header.
+  String get databaseTypeHeader => databaseType == ScsDatabaseType.mongodb ? 'mongodb' : 'eazi';
+
   @override
   String toString() {
-    return 'ScsConfig(projectId: $projectId, baseUrl: $baseUrl)';
+    return 'ScsConfig(projectId: $projectId, baseUrl: $baseUrl, databaseType: ${databaseType.name})';
   }
 }

@@ -12,7 +12,8 @@ import 'ml_screen.dart';
 import 'ai_screen.dart';
 import 'posts_screen.dart';
 import 'calls_screen.dart';
-import 'database_examples_screen.dart';
+import 'eazi_database_screen.dart';
+import 'reladb_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -194,12 +195,21 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               _FeatureCard(
-                icon: Icons.code,
-                title: 'DB Examples',
-                subtitle: 'eaZI & RelaDB',
-                color: Colors.deepOrange,
+                icon: Icons.folder_outlined,
+                title: 'eaZI Database',
+                subtitle: 'Document NoSQL',
+                color: Colors.blue,
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const DatabaseExamplesScreen()),
+                  MaterialPageRoute(builder: (_) => const EaziDatabaseScreen()),
+                ),
+              ),
+              _FeatureCard(
+                icon: Icons.cloud_outlined,
+                title: 'RelaDB',
+                subtitle: 'Production DB',
+                color: Colors.green,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ReladbScreen()),
                 ),
               ),
             ],
