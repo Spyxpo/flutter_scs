@@ -1,6 +1,6 @@
 name: flutter_scs
 description: Flutter SDK for SCS (Spyxpo Cloud Services) - A complete backend-as-a-service solution with authentication, database, storage, real-time sync, messaging, and more.
-version: 0.0.1
+version: 1.0.0
 homepage: https://github.com/spyxpo/flutter_scs
 repository: https://github.com/spyxpo/flutter_scs
 issue_tracker: https://github.com/spyxpo/flutter_scs/issues

@@ -4,30 +4,90 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../utils/http_client.dart';
 import '../scs_config.dart';
 
-/// Call types
-enum CallType { voice, video, livestream }
+/// Types of calls supported by the call service.
+enum CallType {
+  /// Audio-only voice call.
+  voice,
 
-/// Call modes
-enum CallMode { p2p, group, broadcast }
+  /// Video call with optional audio.
+  video,
 
-/// Participant roles
-enum ParticipantRole { host, coHost, participant, viewer }
+  /// One-to-many livestream broadcast.
+  livestream,
+}
 
-/// Call model
+/// Modes of call organization.
+enum CallMode {
+  /// Peer-to-peer call between two participants.
+  p2p,
+
+  /// Group call with multiple participants.
+  group,
+
+  /// Broadcast mode with hosts and viewers.
+  broadcast,
+}
+
+/// Roles that participants can have in a call.
+enum ParticipantRole {
+  /// Primary call host with full permissions.
+  host,
+
+  /// Co-host with elevated permissions.
+  coHost,
+
+  /// Regular participant who can interact.
+  participant,
+
+  /// View-only participant (for broadcasts).
+  viewer,
+}
+
+/// Represents a voice/video call or livestream session.
+///
+/// Contains all metadata about a call including its type, mode,
+/// participants, settings, and timing information.
 class Call {
+  /// Unique identifier for the call.
   final String callId;
+
+  /// Room identifier for the call.
   final String roomId;
+
+  /// Project this call belongs to.
   final String projectId;
+
+  /// Type of call (voice, video, or livestream).
   final CallType type;
+
+  /// Mode of the call (p2p, group, or broadcast).
   final CallMode mode;
+
+  /// Current status of the call (e.g., 'waiting', 'active', 'ended').
   final String status;
+
+  /// User ID of the call host.
   final String? hostId;
+
+  /// Display name of the call host.
   final String? hostDisplayName;
+
+  /// Maximum number of participants allowed.
   final int maxParticipants;
+
+  /// Call settings and configuration.
   final Map<String, dynamic> settings;
+
+  /// When the call started.
   final DateTime? startedAt;
+
+  /// When the call ended.
   final DateTime? endedAt;
+
+  /// Duration of the call in seconds.
   final int duration;
+
+  /// When the call was created.
   final DateTime createdAt;
 
   Call({
@@ -89,16 +149,36 @@ class Call {
   }
 }
 
-/// Participant model
+/// Represents a participant in a call.
+///
+/// Contains information about the participant including their
+/// role, media state, and session timing.
 class Participant {
+  /// Unique identifier for the participant.
   final String participantId;
+
+  /// User ID if the participant is authenticated.
   final String? userId;
+
+  /// Display name shown to other participants.
   final String displayName;
+
+  /// Role of the participant in the call.
   final ParticipantRole role;
+
+  /// Current status (e.g., 'connected', 'disconnected').
   final String status;
+
+  /// Current media state (e.g., {'audio': true, 'video': false}).
   final Map<String, bool> mediaState;
+
+  /// When the participant joined the call.
   final DateTime joinedAt;
+
+  /// When the participant left the call (null if still in call).
   final DateTime? leftAt;
+
+  /// Duration of participation in seconds.
   final int duration;
 
   Participant({
@@ -141,12 +221,24 @@ class Participant {
   }
 }
 
-/// Call token data
+/// Authentication token for joining a call.
+///
+/// Contains the JWT token and associated metadata for
+/// authenticating a participant to join a call.
 class CallToken {
+  /// The JWT token string.
   final String token;
+
+  /// Unique identifier for this token.
   final String tokenId;
+
+  /// Role granted by this token.
   final ParticipantRole role;
+
+  /// List of permissions granted by this token.
   final List<String> permissions;
+
+  /// When this token expires.
   final DateTime expiresAt;
 
   CallToken({
@@ -168,11 +260,20 @@ class CallToken {
   }
 }
 
-/// Call service statistics
+/// Statistics about call service usage.
+///
+/// Contains aggregate metrics about calls in the project.
 class CallStats {
+  /// Total number of calls created.
   final int totalCalls;
+
+  /// Number of currently active calls.
   final int activeCalls;
+
+  /// Total call duration in minutes.
   final int totalMinutes;
+
+  /// Number of recorded calls.
   final int recordings;
 
   CallStats({

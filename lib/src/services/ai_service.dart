@@ -342,13 +342,27 @@ class AiService {
   }
 }
 
-/// An AI model.
+/// Represents an AI model available in the SCS platform.
+///
+/// Contains metadata about the model including its name, capabilities,
+/// and availability status.
 class AiModel {
+  /// The unique identifier/name of the model.
   final String name;
+
+  /// Human-readable display name for the model.
   final String? displayName;
+
+  /// Description of the model's capabilities.
   final String? description;
+
+  /// The number of parameters in the model (in millions/billions).
   final int? parameterSize;
+
+  /// Category of the model (e.g., 'chat', 'completion', 'image').
   final String? category;
+
+  /// Whether the model is currently available for use.
   final bool isAvailable;
 
   const AiModel({
@@ -372,9 +386,15 @@ class AiModel {
   }
 }
 
-/// A chat message.
+/// Represents a message in a chat conversation.
+///
+/// Each message has a role (user, assistant, or system) and content.
+/// Use the factory constructors for convenient message creation.
 class ChatMessage {
+  /// The role of the message sender ('user', 'assistant', or 'system').
   final String role;
+
+  /// The text content of the message.
   final String content;
 
   const ChatMessage({
@@ -412,12 +432,24 @@ class ChatMessage {
   }
 }
 
-/// A chat response.
+/// Response from the AI chat endpoint.
+///
+/// Contains the assistant's response message along with metadata
+/// about token usage and the model used.
 class ChatResponse {
+  /// The assistant's response message.
   final ChatMessage message;
+
+  /// The model that generated the response.
   final String? model;
+
+  /// Number of tokens in the prompt.
   final int? promptTokens;
+
+  /// Number of tokens in the completion.
   final int? completionTokens;
+
+  /// Total tokens used (prompt + completion).
   final int? totalTokens;
 
   const ChatResponse({
@@ -445,12 +477,24 @@ class ChatResponse {
   String get content => message.content;
 }
 
-/// A completion response.
+/// Response from the AI text completion endpoint.
+///
+/// Contains the generated text along with metadata
+/// about token usage and the model used.
 class CompletionResponse {
+  /// The generated completion text.
   final String text;
+
+  /// The model that generated the completion.
   final String? model;
+
+  /// Number of tokens in the prompt.
   final int? promptTokens;
+
+  /// Number of tokens in the completion.
   final int? completionTokens;
+
+  /// Total tokens used (prompt + completion).
   final int? totalTokens;
 
   const CompletionResponse({
@@ -472,10 +516,17 @@ class CompletionResponse {
   }
 }
 
-/// An image generation response.
+/// Response from the AI image generation endpoint.
+///
+/// Contains either a URL to the generated image or base64-encoded image data.
 class ImageGenerationResponse {
+  /// URL to the generated image (if available).
   final String? imageUrl;
+
+  /// Base64-encoded image data (if available).
   final String? base64;
+
+  /// The model that generated the image.
   final String? model;
 
   const ImageGenerationResponse({
@@ -496,12 +547,23 @@ class ImageGenerationResponse {
   bool get hasImage => imageUrl != null || base64 != null;
 }
 
-/// A conversation.
+/// Represents a conversation session with the AI.
+///
+/// Contains the conversation history and metadata for persistent chat sessions.
 class Conversation {
+  /// Unique identifier for the conversation.
   final String id;
+
+  /// Optional title for the conversation.
   final String? title;
+
+  /// List of messages in the conversation.
   final List<ChatMessage> messages;
+
+  /// When the conversation was created.
   final DateTime? createdAt;
+
+  /// When the conversation was last updated.
   final DateTime? updatedAt;
 
   const Conversation({
@@ -533,19 +595,45 @@ class Conversation {
 
 // ==================== AI AGENTS ====================
 
-/// An AI agent.
+/// Represents an AI agent with custom instructions and tools.
+///
+/// Agents are persistent AI assistants that can be configured with
+/// specific behaviors, tools, and knowledge to perform specialized tasks.
 class Agent {
+  /// Unique identifier for the agent.
   final String id;
+
+  /// Name of the agent.
   final String name;
+
+  /// Description of what the agent does.
   final String? description;
+
+  /// System instructions that define the agent's behavior.
   final String? instructions;
+
+  /// The AI model to use for this agent.
   final String? model;
+
+  /// List of tool IDs the agent can use.
   final List<String> tools;
+
+  /// Temperature setting for response randomness (0.0-2.0).
   final double? temperature;
+
+  /// Maximum tokens for responses.
   final int? maxTokens;
+
+  /// Custom metadata associated with the agent.
   final Map<String, dynamic>? metadata;
+
+  /// Current status of the agent ('active', 'inactive', etc.).
   final String status;
+
+  /// When the agent was created.
   final DateTime? createdAt;
+
+  /// When the agent was last updated.
   final DateTime? updatedAt;
 
   const Agent({
@@ -585,13 +673,27 @@ class Agent {
   }
 }
 
-/// An agent session.
+/// Represents a conversation session with an AI agent.
+///
+/// Sessions maintain state and conversation history between
+/// multiple interactions with an agent.
 class AgentSession {
+  /// Unique identifier for the session.
   final String sessionId;
+
+  /// The agent this session belongs to.
   final String agentId;
+
+  /// List of messages in this session.
   final List<ChatMessage> messages;
+
+  /// Custom context data for this session.
   final Map<String, dynamic>? context;
+
+  /// When the session was created.
   final DateTime? createdAt;
+
+  /// When the session was last updated.
   final DateTime? updatedAt;
 
   const AgentSession({
@@ -623,13 +725,27 @@ class AgentSession {
   }
 }
 
-/// An agent run response.
+/// Response from running an AI agent.
+///
+/// Contains the agent's output along with metadata about
+/// the execution including token usage and processing time.
 class AgentRunResponse {
+  /// The agent's response output.
   final String output;
+
+  /// The session ID for this interaction.
   final String sessionId;
+
+  /// The agent that processed the request.
   final String agentId;
+
+  /// The model that generated the response.
   final String? model;
+
+  /// Number of tokens used in the request.
   final int? tokensUsed;
+
+  /// Processing time in milliseconds.
   final int? processingTime;
 
   const AgentRunResponse({
@@ -653,13 +769,27 @@ class AgentRunResponse {
   }
 }
 
-/// An agent tool.
+/// Represents a tool that AI agents can use.
+///
+/// Tools extend agent capabilities by allowing them to perform
+/// specific actions like API calls, calculations, or data retrieval.
 class AgentTool {
+  /// Unique identifier for the tool.
   final String id;
+
+  /// Name of the tool.
   final String name;
+
+  /// Description of what the tool does.
   final String? description;
+
+  /// JSON schema defining the tool's parameters.
   final Map<String, dynamic>? parameters;
+
+  /// Current status of the tool ('active', 'inactive', etc.).
   final String status;
+
+  /// When the tool was created.
   final DateTime? createdAt;
 
   const AgentTool({
@@ -685,11 +815,21 @@ class AgentTool {
   }
 }
 
-/// TTS response.
+/// Response from the text-to-speech endpoint.
+///
+/// Contains the generated audio data in base64 format along with
+/// metadata about the audio format.
 class TTSResponse {
+  /// Whether the TTS operation was successful.
   final bool success;
+
+  /// Base64-encoded audio data.
   final String audio;
+
+  /// Audio format (e.g., 'wav', 'mp3').
   final String format;
+
+  /// Audio sample rate in Hz.
   final int sampleRate;
 
   const TTSResponse({
@@ -709,9 +849,14 @@ class TTSResponse {
   }
 }
 
-/// STT response.
+/// Response from the speech-to-text endpoint.
+///
+/// Contains the transcribed text from the audio input.
 class STTResponse {
+  /// Whether the STT operation was successful.
   final bool success;
+
+  /// The transcribed text from the audio.
   final String text;
 
   const STTResponse({

@@ -1,5 +1,8 @@
 # flutter_scs
 
+[![GitHub stars](https://img.shields.io/github/stars/spyxpo/flutter_scs.svg?style=social)](https://github.com/spyxpo/flutter_scs)
+[![pub package](https://img.shields.io/pub/v/flutter_scs.svg)](https://pub.dartlang.org/packages/flutter_scs)
+
 Flutter SDK for SCS (Spyxpo Cloud Services) - a complete Backend-as-a-Service solution.
 
 ## Features

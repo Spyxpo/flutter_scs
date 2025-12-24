@@ -7,13 +7,29 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 
 /// Configuration for notification channels (Android only).
+///
+/// Notification channels group notifications by type and allow users
+/// to customize notification behavior per channel.
 class NotificationChannel {
+  /// Unique identifier for the channel.
   final String id;
+
+  /// Display name of the channel shown in system settings.
   final String name;
+
+  /// Description of the channel shown in system settings.
   final String? description;
+
+  /// Importance level determining notification behavior.
   final Importance importance;
+
+  /// Whether to play a sound when notification arrives.
   final bool playSound;
+
+  /// Whether to vibrate when notification arrives.
   final bool enableVibration;
+
+  /// Whether to show a badge on the app icon.
   final bool showBadge;
 
   const NotificationChannel({
@@ -59,10 +75,20 @@ class LocalNotificationsConfig {
 }
 
 /// Data class for notification payload.
+///
+/// Contains the notification data received when a notification
+/// is tapped or received.
 class NotificationPayload {
+  /// Title of the notification.
   final String? title;
+
+  /// Body text of the notification.
   final String? body;
+
+  /// Custom payload data attached to the notification.
   final String? payload;
+
+  /// Unique identifier of the notification.
   final int? id;
 
   const NotificationPayload({
