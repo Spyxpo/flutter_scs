@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../scs_config.dart';
 import '../scs_exception.dart';
@@ -9,22 +8,21 @@ import '../utils/http_client.dart';
 
 /// Service for real-time database operations.
 ///
-/// Provides WebSocket-based real-time data synchronization.
+/// Provides Socket.IO-based real-time data synchronization.
 class RealtimeService {
   final ScsHttpClient _client;
   final ScsConfig _config;
 
-  WebSocketChannel? _channel;
+  io.Socket? _socket;
   bool _connected = false;
   final Map<String, List<void Function(dynamic)>> _listeners = {};
   final StreamController<bool> _connectionStateController =
       StreamController<bool>.broadcast();
   Timer? _reconnectTimer;
-  Timer? _pingTimer;
 
   RealtimeService(this._client, this._config);
 
-  /// Whether the WebSocket is connected.
+  /// Whether the Socket.IO is connected.
   bool get isConnected => _connected;
 
   /// Stream of connection state changes.
@@ -35,39 +33,113 @@ class RealtimeService {
     if (_connected) return;
 
     try {
-      final wsUrl = _config.baseUrl
-          .replaceFirst('http://', 'ws://')
-          .replaceFirst('https://', 'wss://');
-
-      final uri = Uri.parse('$wsUrl/socket.io/?EIO=4&transport=websocket')
-          .replace(queryParameters: {
-        'EIO': '4',
-        'transport': 'websocket',
-        'apiKey': _config.apiKey,
-      });
-
-      _channel = WebSocketChannel.connect(uri);
-
-      _channel!.stream.listen(
-        _handleMessage,
-        onError: _handleError,
-        onDone: _handleDisconnect,
+      // Create Socket.IO connection with proper path
+      _socket = io.io(
+        _config.baseUrl,
+        io.OptionBuilder()
+            .setTransports(['websocket', 'polling'])
+            .setPath('/realtime')
+            .setAuth({
+              'apiKey': _config.apiKey,
+              'userToken': _client.userToken,
+            })
+            .enableAutoConnect()
+            .enableReconnection()
+            .setReconnectionAttempts(5)
+            .setReconnectionDelay(1000)
+            .setReconnectionDelayMax(5000)
+            .build(),
       );
 
-      _connected = true;
-      _connectionStateController.add(true);
-      _startPingTimer();
+      final completer = Completer<void>();
+
+      _socket!.onConnect((_) {
+        _connected = true;
+        _connectionStateController.add(true);
+        _resubscribeAll();
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      _socket!.onDisconnect((_) {
+        _connected = false;
+        _connectionStateController.add(false);
+      });
+
+      _socket!.onConnectError((error) {
+        _connected = false;
+        _connectionStateController.add(false);
+        if (!completer.isCompleted) {
+          completer.completeError(
+            ScsException.network('Failed to connect to real-time database: $error'),
+          );
+        }
+      });
+
+      _socket!.onError((error) {
+        // Log error but don't disconnect - Socket.IO will handle reconnection
+      });
+
+      // Handle value updates from server
+      _socket!.on('value', (data) {
+        if (data is Map) {
+          final path = data['path'] as String?;
+          final value = data['data'];
+          if (path != null) {
+            _notifyListeners(path, value);
+          }
+        }
+      });
+
+      // Handle child events
+      _socket!.on('child_added', (data) {
+        _handleChildEvent('child_added', data);
+      });
+
+      _socket!.on('child_changed', (data) {
+        _handleChildEvent('child_changed', data);
+      });
+
+      _socket!.on('child_removed', (data) {
+        _handleChildEvent('child_removed', data);
+      });
+
+      // Handle presence updates
+      _socket!.on('presence:update', (data) {
+        if (data is Map) {
+          final path = data['path'] as String?;
+          if (path != null) {
+            _notifyListeners('$path/__presence', data['users']);
+          }
+        }
+      });
+
+      // Connect the socket
+      _socket!.connect();
+
+      // Wait for connection with timeout
+      await completer.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw ScsException.network('Connection timeout');
+        },
+      );
     } catch (e) {
+      _connected = false;
+      _socket?.dispose();
+      _socket = null;
+      if (e is ScsException) rethrow;
       throw ScsException.network('Failed to connect to real-time database: $e');
     }
   }
 
   /// Disconnects from the real-time database.
   void disconnect() {
-    _stopPingTimer();
     _reconnectTimer?.cancel();
-    _channel?.sink.close();
-    _channel = null;
+    _socket?.disconnect();
+    _socket?.dispose();
+    _socket = null;
     _connected = false;
     _connectionStateController.add(false);
   }
@@ -81,11 +153,8 @@ class RealtimeService {
   void subscribe(String path, void Function(dynamic data) callback) {
     _listeners.putIfAbsent(path, () => []).add(callback);
 
-    if (_connected) {
-      _sendMessage({
-        'type': 'subscribe',
-        'path': path,
-      });
+    if (_connected && _socket != null) {
+      _socket!.emit('subscribe', {'path': path, 'type': 'value'});
     }
   }
 
@@ -100,11 +169,8 @@ class RealtimeService {
       _listeners.remove(path);
     }
 
-    if (_connected && !_listeners.containsKey(path)) {
-      _sendMessage({
-        'type': 'unsubscribe',
-        'path': path,
-      });
+    if (_connected && _socket != null && !_listeners.containsKey(path)) {
+      _socket!.emit('unsubscribe', {'path': path});
     }
   }
 
@@ -123,18 +189,23 @@ class RealtimeService {
       'realtime/data/$path',
       body: {'data': data},
     );
-    _notifyListeners(path, data);
+    // Check for errors before notifying listeners
     if (response.containsKey('error')) {
       throw ScsException(response['error'] as String);
     }
+    // Local notification - server will broadcast to other clients
+    _notifyListeners(path, data);
   }
 
   /// Updates data at a path (merge).
   Future<void> updateData(String path, Map<String, dynamic> data) async {
-    await _client.patch(
+    final response = await _client.patch(
       'realtime/data/$path',
       body: {'data': data},
     );
+    if (response.containsKey('error')) {
+      throw ScsException(response['error'] as String);
+    }
     _notifyListeners(path, data);
   }
 
@@ -170,116 +241,67 @@ class RealtimeService {
     );
   }
 
-  void _handleMessage(dynamic message) {
-    try {
-      // Handle Socket.IO protocol messages
-      if (message is String) {
-        if (message.startsWith('0')) {
-          // Connection established
-          return;
-        }
-        if (message.startsWith('40')) {
-          // Connected to namespace
-          _resubscribeAll();
-          return;
-        }
-        if (message.startsWith('42')) {
-          // Event message
-          final jsonStr = message.substring(2);
-          final data = jsonDecode(jsonStr) as List<dynamic>;
-          if (data.length >= 2) {
-            final eventName = data[0] as String;
-            final eventData = data[1];
-            _handleEvent(eventName, eventData);
-          }
-          return;
-        }
-        if (message == '3') {
-          // Pong
-          return;
-        }
-      }
-    } catch (e) {
-      // Ignore parsing errors
-    }
-  }
-
-  void _handleEvent(String event, dynamic data) {
-    if (event == 'data_changed' && data is Map) {
+  void _handleChildEvent(String event, dynamic data) {
+    if (data is Map) {
       final path = data['path'] as String?;
+      final key = data['key'] as String?;
       final value = data['data'];
-      if (path != null) {
-        _notifyListeners(path, value);
+      if (path != null && key != null) {
+        // Notify listeners of the parent path about child changes
+        _notifyListeners(path, {key: value});
       }
     }
   }
 
   void _notifyListeners(String path, dynamic data) {
     // Notify exact path listeners
-    _listeners[path]?.forEach((callback) => callback(data));
+    final listeners = _listeners[path];
+    if (listeners != null) {
+      for (final callback in List.from(listeners)) {
+        try {
+          callback(data);
+        } catch (e) {
+          // Ignore callback errors
+        }
+      }
+    }
 
     // Notify parent path listeners
     final segments = path.split('/');
     for (var i = segments.length - 1; i > 0; i--) {
       final parentPath = segments.sublist(0, i).join('/');
-      _listeners[parentPath]?.forEach((callback) => callback({
-            path.substring(parentPath.length + 1): data,
-          }));
+      final parentListeners = _listeners[parentPath];
+      if (parentListeners != null) {
+        final childKey = path.substring(parentPath.length + 1);
+        for (final callback in List.from(parentListeners)) {
+          try {
+            callback({childKey: data});
+          } catch (e) {
+            // Ignore callback errors
+          }
+        }
+      }
     }
 
     // Notify root listeners
-    _listeners['']?.forEach((callback) => callback({path: data}));
-  }
-
-  void _handleError(dynamic error) {
-    _connected = false;
-    _connectionStateController.add(false);
-    _scheduleReconnect();
-  }
-
-  void _handleDisconnect() {
-    _connected = false;
-    _connectionStateController.add(false);
-    _scheduleReconnect();
-  }
-
-  void _scheduleReconnect() {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 5), () {
-      if (!_connected && _listeners.isNotEmpty) {
-        connect();
+    final rootListeners = _listeners[''];
+    if (rootListeners != null) {
+      for (final callback in List.from(rootListeners)) {
+        try {
+          callback({path: data});
+        } catch (e) {
+          // Ignore callback errors
+        }
       }
-    });
+    }
   }
 
   void _resubscribeAll() {
+    if (_socket == null || !_connected) return;
+
     for (final path in _listeners.keys) {
-      _sendMessage({
-        'type': 'subscribe',
-        'path': path,
-      });
+      _socket!.emit('subscribe', {'path': path, 'type': 'value'});
     }
-  }
-
-  void _sendMessage(Map<String, dynamic> message) {
-    if (_connected && _channel != null) {
-      final encoded = '42${jsonEncode(['message', message])}';
-      _channel!.sink.add(encoded);
-    }
-  }
-
-  void _startPingTimer() {
-    _pingTimer?.cancel();
-    _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) {
-      if (_connected && _channel != null) {
-        _channel!.sink.add('2');
-      }
-    });
-  }
-
-  void _stopPingTimer() {
-    _pingTimer?.cancel();
-    _pingTimer = null;
   }
 
   /// Disposes of resources.
@@ -295,6 +317,10 @@ class RealtimeRef {
   final RealtimeService _service;
   final ScsHttpClient _client;
   final String _path;
+
+  /// Cached stream controller for this reference.
+  StreamController<dynamic>? _streamController;
+  void Function(dynamic)? _streamCallback;
 
   RealtimeRef(this._service, this._client, this._path);
 
@@ -355,19 +381,47 @@ class RealtimeRef {
   }
 
   /// Creates a stream of value changes.
+  ///
+  /// This returns a broadcast stream that can have multiple listeners.
+  /// The stream is cached per RealtimeRef instance to prevent memory leaks.
   Stream<dynamic> get onValue {
-    final controller = StreamController<dynamic>.broadcast();
-
-    void callback(dynamic data) {
-      controller.add(data);
+    // Return existing stream if already created
+    if (_streamController != null && !_streamController!.isClosed) {
+      return _streamController!.stream;
     }
 
-    _service.subscribe(_path, callback);
+    // Create a new broadcast stream controller
+    _streamController = StreamController<dynamic>.broadcast(
+      onListen: () {
+        // Subscribe when first listener attaches
+        _streamCallback = (dynamic data) {
+          if (_streamController != null && !_streamController!.isClosed) {
+            _streamController!.add(data);
+          }
+        };
+        _service.subscribe(_path, _streamCallback!);
+      },
+      onCancel: () {
+        // Unsubscribe when all listeners detach
+        if (_streamCallback != null) {
+          _service.unsubscribe(_path, _streamCallback!);
+          _streamCallback = null;
+        }
+        _streamController?.close();
+        _streamController = null;
+      },
+    );
 
-    controller.onCancel = () {
-      _service.unsubscribe(_path, callback);
-    };
+    return _streamController!.stream;
+  }
 
-    return controller.stream;
+  /// Disposes of the stream resources for this reference.
+  void dispose() {
+    if (_streamCallback != null) {
+      _service.unsubscribe(_path, _streamCallback!);
+      _streamCallback = null;
+    }
+    _streamController?.close();
+    _streamController = null;
   }
 }
