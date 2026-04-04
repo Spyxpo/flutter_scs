@@ -871,3 +871,73 @@ class STTResponse {
     );
   }
 }
+
+// ==================== PROVIDER SETTINGS ====================
+
+/// Holds the LLM provider config for a project (API key is never returned).
+class AiProviderSettings {
+  final String provider;
+  final String model;
+  final String baseUrl;
+  final bool hasApiKey;
+
+  const AiProviderSettings({
+    required this.provider,
+    required this.model,
+    required this.baseUrl,
+    required this.hasApiKey,
+  });
+
+  factory AiProviderSettings.fromJson(Map<String, dynamic> json) {
+    return AiProviderSettings(
+      provider: json['provider'] as String? ?? '',
+      model: json['model'] as String? ?? '',
+      baseUrl: json['baseUrl'] as String? ?? '',
+      hasApiKey: json['hasApiKey'] as bool? ?? false,
+    );
+  }
+}
+
+extension AiProviderSettingsExtension on AiService {
+  /// Get the LLM provider configured for this project.
+  ///
+  /// Supported providers: huggingface, openai, groq, anthropic, google,
+  /// together, mistral, openrouter, custom
+  ///
+  /// Returns a map with 'settings' ([AiProviderSettings]) and
+  /// 'supportedProviders' list.
+  Future<Map<String, dynamic>> getProviderSettings() async {
+    return _client.get('ai/settings/provider');
+  }
+
+  /// Configure which LLM provider this project uses.
+  ///
+  /// [provider]  Provider ID — e.g. 'huggingface', 'openai', 'groq'
+  /// [apiKey]    API key / token for the provider
+  ///             (Hugging Face: get free token at huggingface.co/settings/tokens)
+  /// [model]     Default model ID (optional)
+  /// [baseUrl]   Only needed when provider = 'custom'
+  ///
+  /// Example:
+  /// ```dart
+  /// await scs.ai.updateProviderSettings(
+  ///   provider: 'huggingface',
+  ///   apiKey: 'hf_...',
+  ///   model: 'meta-llama/Llama-3.2-3B-Instruct',
+  /// );
+  /// ```
+  Future<Map<String, dynamic>> updateProviderSettings({
+    required String provider,
+    required String apiKey,
+    String? model,
+    String? baseUrl,
+  }) async {
+    final body = <String, dynamic>{
+      'provider': provider,
+      'apiKey': apiKey,
+      if (model != null) 'model': model,
+      if (baseUrl != null) 'baseUrl': baseUrl,
+    };
+    return _client.put('ai/settings/provider', body: body);
+  }
+}
