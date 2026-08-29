@@ -9,6 +9,7 @@ import 'services/functions_service.dart';
 import 'services/ml_service.dart';
 import 'services/ai_service.dart';
 import 'services/call_service.dart';
+import 'services/new_services.dart' as ns;
 import 'utils/http_client.dart';
 import 'utils/session_storage.dart';
 
@@ -142,6 +143,59 @@ class SCS {
 
   /// Gets the base URL.
   String get baseUrl => config.baseUrl;
+
+  // ---- new services (25) — lazily instantiated ----
+  ns.SqlService? _sql;
+  ns.MailService? _mail;
+  ns.QueueService? _queue;
+  ns.CronService? _cron;
+  ns.VaultService? _vault;
+  ns.AnalyticsService? _analytics;
+  ns.MonitorService? _monitor;
+  ns.SearchService? _search;
+  ns.CdnService? _cdn;
+  ns.SmsService? _sms;
+  ns.AccessService? _access;
+  ns.PipelineService? _pipeline;
+  ns.ExperimentsService? _experiments;
+  ns.InboxService? _inbox;
+  ns.LinksService? _links;
+  ns.CrashService? _crash;
+  ns.PerfService? _perf;
+  ns.DnsService? _dns;
+  ns.TranslateService? _translate;
+  ns.WarehouseService? _warehouse;
+  ns.ArtifactService? _artifact;
+  ns.BillingService? _billing;
+  ns.WorkflowsService? _workflows;
+  ns.IotService? _iot;
+  ns.FirewallService? _firewall;
+
+  ns.SqlService         get sql         => _sql         ??= ns.SqlService(_httpClient, config.projectId);
+  ns.MailService        get mail        => _mail        ??= ns.MailService(_httpClient);
+  ns.QueueService       get queue       => _queue       ??= ns.QueueService(_httpClient, config.projectId);
+  ns.CronService        get cron        => _cron        ??= ns.CronService(_httpClient);
+  ns.VaultService       get vault       => _vault       ??= ns.VaultService(_httpClient, config.projectId);
+  ns.AnalyticsService   get analytics   => _analytics   ??= ns.AnalyticsService(_httpClient, config.projectId);
+  ns.MonitorService     get monitor     => _monitor     ??= ns.MonitorService(_httpClient, config.projectId);
+  ns.SearchService      get search      => _search      ??= ns.SearchService(_httpClient, config.projectId);
+  ns.CdnService         get cdn         => _cdn         ??= ns.CdnService(_httpClient);
+  ns.SmsService         get sms         => _sms         ??= ns.SmsService(_httpClient);
+  ns.AccessService      get access      => _access      ??= ns.AccessService(_httpClient, config.projectId);
+  ns.PipelineService    get pipeline    => _pipeline    ??= ns.PipelineService(_httpClient, config.projectId);
+  ns.ExperimentsService get experiments => _experiments ??= ns.ExperimentsService(_httpClient, config.projectId);
+  ns.InboxService       get inbox       => _inbox       ??= ns.InboxService(_httpClient, config.projectId);
+  ns.LinksService       get links       => _links       ??= ns.LinksService(_httpClient, config.projectId);
+  ns.CrashService       get crash       => _crash       ??= ns.CrashService(_httpClient, config.projectId);
+  ns.PerfService        get perf        => _perf        ??= ns.PerfService(_httpClient, config.projectId);
+  ns.DnsService         get dns         => _dns         ??= ns.DnsService(_httpClient, config.projectId);
+  ns.TranslateService   get translate   => _translate   ??= ns.TranslateService(_httpClient);
+  ns.WarehouseService   get warehouse   => _warehouse   ??= ns.WarehouseService(_httpClient, config.projectId);
+  ns.ArtifactService    get artifact    => _artifact    ??= ns.ArtifactService(_httpClient, config.projectId);
+  ns.BillingService     get billing     => _billing     ??= ns.BillingService(_httpClient, config.projectId);
+  ns.WorkflowsService   get workflows   => _workflows   ??= ns.WorkflowsService(_httpClient, config.projectId);
+  ns.IotService         get iot         => _iot         ??= ns.IotService(_httpClient, config.projectId);
+  ns.FirewallService    get firewall    => _firewall    ??= ns.FirewallService(_httpClient);
 
   /// Disposes of resources used by the SDK.
   void dispose() {

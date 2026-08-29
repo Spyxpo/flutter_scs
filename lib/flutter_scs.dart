@@ -25,6 +25,7 @@ export 'src/services/ml_service.dart';
 export 'src/services/ai_service.dart';
 export 'src/services/call_service.dart';
 export 'src/services/local_notifications_service.dart';
+export 'src/services/new_services.dart';
 
 // Models
 export 'src/models/user.dart';
